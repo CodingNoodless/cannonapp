@@ -118,10 +118,8 @@ class LipsMetrics(BaseModel):
 class MeasurementDetail(BaseModel):
     """Specific measurement with value, score and optional rating"""
     value: float
-    unit: Optional[str] = None
     score: Optional[float] = None
     rating: Optional[str] = None
-    ideal: Optional[str] = None
 
 class AdvancedMeasurements(BaseModel):
     """Grouped measurements by view"""
@@ -300,13 +298,18 @@ class ScanAnalysis(BaseModel):
     personalized_summary: Optional[str] = None
     estimated_potential: Optional[float] = None
     
-    # New detailed fields
+    # New detailed fields - matching the cannon face analysis JSON response
     success: Optional[bool] = None
     scan_summary: Optional[AdvancedScanSummary] = None
     measurements: Optional[AdvancedMeasurements] = None
     golden_ratio_analysis: Optional[GoldenRatioAnalysis] = None
     ai_recommendations: Optional[AdvancedAIRecommendations] = None
     processed_image: Optional[str] = None
+    
+    # Additional fields from the JSON response
+    frames_analyzed: Optional[int] = None
+    frames_by_angle: Optional[Dict[str, int]] = None
+    overall_score: Optional[float] = None
 
 
 # ============================================

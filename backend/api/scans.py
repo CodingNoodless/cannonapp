@@ -15,89 +15,141 @@ async def upload_scan_video(
     video: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
-    """Upload a 15-second face scan video"""
+    """Upload a 15-second face scan video and analyze directly"""
     db = get_database()
     user_id = current_user["id"]
     
+    # Read video data directly without saving locally
     video_data = await video.read()
-    video_url = await storage_service.upload_video(video_data, user_id)
     
-    if not video_url:
-        raise HTTPException(status_code=500, detail="Failed to upload video")
+    if not video_data:
+        raise HTTPException(status_code=400, detail="No video data received")
     
+    # Create scan record without video URL since we're not storing it
     scan_doc = {
         "user_id": user_id,
         "created_at": datetime.utcnow(),
-        "video_url": video_url,
         "is_unlocked": current_user.get("is_paid", False),
-        "processing_status": "pending",
+        "processing_status": "processing",
         "scan_type": "video"
     }
     
     result = await db.scans.insert_one(scan_doc)
     scan_id = str(result.inserted_id)
     
-    if not current_user.get("first_scan_completed", False):
-        await db.users.update_one(
-            {"_id": ObjectId(user_id)},
-            {"$set": {"first_scan_completed": True}}
+    # Send video directly to cannon_facial_analysis service
+    try:
+        analysis = await facial_analysis_client.upload_video(video_data)
+        
+        # Update scan with analysis results
+        await db.scans.update_one(
+            {"_id": ObjectId(scan_id)},
+            {"$set": {"analysis": analysis, "processing_status": "completed"}}
         )
-    
-    return {"scan_id": scan_id, "video_url": video_url}
+        
+        # Update user first scan status
+        if not current_user.get("first_scan_completed", False):
+            await db.users.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": {"first_scan_completed": True}}
+            )
+        
+        # Update leaderboard (reuse existing logic)
+        overall_score = 0.0
+        if isinstance(analysis, dict):
+            overall_score = analysis.get("scan_summary", {}).get("overall_score")
+            if overall_score is None:
+                overall_score = analysis.get("metrics", {}).get("overall_score")
+            if overall_score is None:
+                overall_score = analysis.get("overall_score", 0.0)
+        
+        # Calculate leaderboard score and update
+        leaderboard_score = (float(overall_score) if overall_score else 0) * 10
+        
+        existing_entry = await db.leaderboard.find_one({"user_id": user_id})
+        
+        if existing_entry:
+            new_score = max(existing_entry.get("score", 0), leaderboard_score)
+            await db.leaderboard.update_one(
+                {"user_id": user_id},
+                {
+                    "$set": {
+                        "score": new_score,
+                        "level": float(overall_score) if overall_score else 0,
+                        "last_scan_at": datetime.utcnow()
+                    },
+                    "$inc": {"scans_count": 1}
+                }
+            )
+        else:
+            await db.leaderboard.insert_one({
+                "user_id": user_id,
+                "score": leaderboard_score,
+                "level": float(overall_score) if overall_score else 0,
+                "streak_days": 1,
+                "improvement_percentage": 0,
+                "scans_count": 1,
+                "last_scan_at": datetime.utcnow(),
+                "created_at": datetime.utcnow()
+            })
+        
+        # Recalculate ranks
+        all_entries = await db.leaderboard.find().sort("score", -1).to_list(None)
+        for rank, entry in enumerate(all_entries, 1):
+            await db.leaderboard.update_one({"_id": entry["_id"]}, {"$set": {"rank": rank}})
+        
+        return {"scan_id": scan_id, "analysis": analysis}
+        
+    except Exception as e:
+        await db.scans.update_one(
+            {"_id": ObjectId(scan_id)}, 
+            {"$set": {"processing_status": "failed", "error_message": str(e)}}
+        )
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
 
 
 @router.post("/{scan_id}/analyze")
 async def analyze_scan(scan_id: str, current_user: dict = Depends(get_current_user)):
-    """Trigger AI analysis for uploaded scan (supports both image and video)"""
+    """Trigger AI analysis for uploaded scan (supports only image scans now)"""
     db = get_database()
     
     scan = await db.scans.find_one({"_id": ObjectId(scan_id), "user_id": current_user["id"]})
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     
+    # Video scans are now analyzed directly during upload
+    if scan.get("scan_type") == "video":
+        if scan.get("processing_status") == "completed":
+            return {"message": "Analysis already completed", "scan_id": scan_id}
+        else:
+            raise HTTPException(status_code=400, detail="Video scans are analyzed during upload")
+    
     await db.scans.update_one({"_id": ObjectId(scan_id)}, {"$set": {"processing_status": "processing"}})
     
     try:
-        # Handle video scan
-        if scan.get("scan_type") == "video":
-            video_url = scan["video_url"]
-            if video_url.startswith("/uploads/"):
-                video_data = await storage_service.get_image(video_url) # get_image works for any file
-            else:
-                import httpx
-                async with httpx.AsyncClient() as client:
-                    resp = await client.get(video_url)
-                    video_data = resp.content
-            
-            if not video_data:
-                raise HTTPException(status_code=500, detail="Failed to retrieve video data")
-            
-            # Send video directly to cannon_facial_analysis service
-            analysis = await facial_analysis_client.upload_video(video_data)
+        # Handle legacy image scan only
+        front_url = scan["images"]["front"]
+        left_url = scan["images"]["left"]
+        right_url = scan["images"]["right"]
+        
+        if front_url.startswith("/uploads/"):
+            front_data = await storage_service.get_image(front_url)
+            left_data = await storage_service.get_image(left_url)
+            right_data = await storage_service.get_image(right_url)
         else:
-            # Handle legacy image scan
-            front_url = scan["images"]["front"]
-            left_url = scan["images"]["left"]
-            right_url = scan["images"]["right"]
-            
-            if front_url.startswith("/uploads/"):
-                front_data = await storage_service.get_image(front_url)
-                left_data = await storage_service.get_image(left_url)
-                right_data = await storage_service.get_image(right_url)
-            else:
-                import httpx
-                async with httpx.AsyncClient() as client:
-                    front_resp = await client.get(front_url)
-                    left_resp = await client.get(left_url)
-                    right_resp = await client.get(right_url)
-                front_data = front_resp.content
-                left_data = left_resp.content
-                right_data = right_resp.content
-            
-            if not all([front_data, left_data, right_data]):
-                raise HTTPException(status_code=500, detail="Failed to retrieve images")
-            
-            analysis = await facial_analysis_client.analyze_frames([front_data, left_data, right_data])
+            import httpx
+            async with httpx.AsyncClient() as client:
+                front_resp = await client.get(front_url)
+                left_resp = await client.get(left_url)
+                right_resp = await client.get(right_url)
+            front_data = front_resp.content
+            left_data = left_resp.content
+            right_data = right_resp.content
+        
+        if not all([front_data, left_data, right_data]):
+            raise HTTPException(status_code=500, detail="Failed to retrieve images")
+        
+        analysis = await facial_analysis_client.analyze_frames([front_data, left_data, right_data])
         
         await db.scans.update_one(
             {"_id": ObjectId(scan_id)},

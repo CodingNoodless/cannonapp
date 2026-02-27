@@ -1,0 +1,107 @@
+"""
+Authentication Middleware - JWT token verification
+"""
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from datetime import datetime
+from typing import Optional
+from bson import ObjectId
+
+from config import settings
+from db import get_database
+
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+    """
+    Verify JWT token and return current user
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm]
+        )
+        
+        user_id: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        
+        if user_id is None or token_type != "access":
+            raise credentials_exception
+            
+    except JWTError:
+        raise credentials_exception
+    
+    # Get user from database
+    db = get_database()
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    
+    if user is None:
+        raise credentials_exception
+    
+    # Convert ObjectId to string
+    user["id"] = str(user["_id"])
+    del user["_id"]
+    del user["password_hash"]  # Don't return password
+    
+    return user
+
+
+async def get_current_admin_user(current_user: dict = Depends(get_current_user)) -> dict:
+    """
+    Verify user is an admin
+    """
+    if not current_user.get("is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user
+
+
+async def get_optional_user(token: Optional[str] = Depends(oauth2_scheme)) -> Optional[dict]:
+    """
+    Get current user if token is provided, otherwise return None
+    """
+    if not token:
+        return None
+    
+    try:
+        return await get_current_user(token)
+    except HTTPException:
+        return None
+
+
+async def require_paid_user(current_user: dict = Depends(get_current_user)) -> dict:
+    """
+    Verify user has active subscription (admins are always allowed)
+    """
+    if current_user.get("is_admin", False):
+        return current_user
+        
+    if not current_user.get("is_paid", False):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Active subscription required"
+        )
+    
+    # Check subscription end date
+    sub_end = current_user.get("subscription_end_date")
+    if sub_end and isinstance(sub_end, datetime):
+        if sub_end < datetime.utcnow():
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Subscription has expired"
+            )
+    
+    return current_user

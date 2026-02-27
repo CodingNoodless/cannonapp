@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facial Analysis Scanner</title>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        .container {
+            position: relative;
+            width: 640px;
+            max-width: 100%;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        video {
+            width: 100%;
+            display: block;
+            transform: scaleX(-1);
+            /* Mirror effect */
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+
+        .overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: white;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+            pointer-events: none;
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        #results {
+            margin-top: 30px;
+            width: 640px;
+            max-width: 100%;
+            display: none;
+        }
+
+        .metric-card {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .metric-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metric-label {
+            font-weight: 600;
+            color: #333;
+            font-size: 15px;
+        }
+
+        .metric-ideal {
+            font-size: 12px;
+            color: #888;
+            margin-top: 2px;
+        }
+
+        .metric-right {
+            text-align: right;
+        }
+
+        .metric-value {
+            font-weight: 700;
+            font-size: 16px;
+            color: #000;
+        }
+
+        .metric-unit {
+            font-size: 12px;
+            color: #666;
+            margin-left: 2px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-optimal {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status-good {
+            background-color: #cce5ff;
+            color: #004085;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Facial Analysis Scanner</h1>
+
+    <div class="container">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+        <div class="overlay">
+            <h2 id="feedback-text">Ready to Scan</h2>
+            <p id="angle-text">Angle: --</p>
+            <p style="font-size: 14px; opacity: 0.8; margin-top: 5px;">⚠️ Tip: Hold camera at arm's length to reduce
+                distortion</p>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="connect-btn">Connect Camera</button>
+        <button id="start-btn" disabled>Start Analysis Scan</button>
+    </div>
+
+    <div id="error-msg" style="color: red; margin-top: 10px; display: none;"></div>
+
+    <div id="results">
+        <h2>Analysis Results</h2>
+        <div id="metrics-container"></div>
+    </div>
+
+    <script src="/js/app.js?v=2"></script>
+</body>
+
+</html>

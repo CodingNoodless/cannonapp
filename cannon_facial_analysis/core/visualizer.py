@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from mediapipe.tasks.python.vision.face_landmarker import FaceLandmarksConnections
-from typing import Optional, Any
+from typing import Optional, Any, List
 
 class Visualizer:
     def __init__(self):

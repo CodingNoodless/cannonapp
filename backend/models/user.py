@@ -49,15 +49,16 @@ class UserProfile(BaseModel):
 class UserCreate(BaseModel):
     """Schema for user registration"""
     email: EmailStr
-    email: EmailStr
     password: str = Field(min_length=8, max_length=100)
     bio: Optional[str] = None
+    phone_number: Optional[str] = Field(default=None, description="Phone number with country code, e.g. +919876543210")
     
     class Config:
         json_schema_extra = {
             "example": {
                 "email": "user@example.com",
-                "password": "securepassword123"
+                "password": "securepassword123",
+                "phone_number": "+919876543210"
             }
         }
 
@@ -80,6 +81,7 @@ class UserResponse(BaseModel):
     profile: UserProfile = Field(default_factory=UserProfile)
     first_scan_completed: bool = False
     is_admin: bool = False
+    phone_number: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -100,6 +102,7 @@ class UserInDB(BaseModel):
     onboarding: OnboardingData = Field(default_factory=OnboardingData)
     profile: UserProfile = Field(default_factory=UserProfile)
     first_scan_completed: bool = False
+    phone_number: Optional[str] = None
 
 
 class TokenResponse(BaseModel):

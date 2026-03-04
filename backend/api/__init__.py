@@ -10,3 +10,4 @@ from .forums import router as forums_router
 from .chat import router as chat_router
 from .leaderboard import router as leaderboard_router
 from .admin import router as admin_router
+from .notifications import router as notifications_router

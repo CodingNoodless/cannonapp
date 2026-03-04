@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     subscription_price_monthly: float = Field(default=9.99)
     subscription_currency: str = Field(default="usd")
     
+    # Twilio WhatsApp
+    twilio_account_sid: str = Field(default="")
+    twilio_auth_token: str = Field(default="")
+    twilio_whatsapp_from: str = Field(default="whatsapp:+14155238886")  # Sandbox default
+    
     # AWS S3
     aws_access_key_id: str = Field(default="")
     aws_secret_access_key: str = Field(default="")

@@ -14,6 +14,7 @@ export default function SignupScreen() {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [bio, setBio] = useState('');
+    const [phone, setPhone] = useState('');
     const [avatarUri, setAvatarUri] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -42,7 +43,7 @@ export default function SignupScreen() {
         }
         setLoading(true);
         try {
-            await signup(email, password, bio);
+            await signup(email, password, bio, phone || undefined);
             if (avatarUri) {
                 try { await api.uploadAvatar(avatarUri); }
                 catch { Alert.alert('Note', 'Account created but profile picture could not be uploaded.'); }
@@ -91,6 +92,19 @@ export default function SignupScreen() {
                             <View style={styles.inputContainer}>
                                 <Text style={styles.label}>Confirm Password</Text>
                                 <TextInput style={styles.input} placeholder="Re-enter password" placeholderTextColor={colors.textMuted} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+                            </View>
+                            <View style={styles.inputContainer}>
+                                <Text style={styles.label}>WhatsApp Number (Optional)</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="+91 98765 43210"
+                                    placeholderTextColor={colors.textMuted}
+                                    value={phone}
+                                    onChangeText={setPhone}
+                                    keyboardType="phone-pad"
+                                    autoCapitalize="none"
+                                />
+                                <Text style={styles.fieldHint}>📲 Get scan results on WhatsApp</Text>
                             </View>
                             <View style={styles.inputContainer}>
                                 <Text style={styles.label}>Bio (Optional)</Text>
@@ -163,6 +177,7 @@ const styles = StyleSheet.create({
         borderWidth: 1.5, borderColor: colors.border, borderStyle: 'dashed',
     },
     avatarText: { ...typography.caption, marginTop: 2, color: colors.accent },
+    fieldHint: { ...typography.caption, color: colors.textMuted, marginLeft: spacing.xs, marginTop: 2 },
     editBadge: {
         position: 'absolute', bottom: 2, right: 2,
         backgroundColor: colors.accent, borderRadius: 12,

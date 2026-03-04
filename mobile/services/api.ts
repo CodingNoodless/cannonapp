@@ -77,8 +77,8 @@ class ApiService {
     }
 
     // Auth
-    async signup(email: string, password: string, bio?: string) {
-        const response = await this.client.post('auth/signup', { email, password, bio });
+    async signup(email: string, password: string, bio?: string, phone_number?: string) {
+        const response = await this.client.post('auth/signup', { email, password, bio, phone_number });
         await this.setTokens(response.data.access_token, response.data.refresh_token);
         return response.data;
     }

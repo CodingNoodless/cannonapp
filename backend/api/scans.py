@@ -98,6 +98,22 @@ async def upload_scan_video(
         for rank, entry in enumerate(all_entries, 1):
             await db.leaderboard.update_one({"_id": entry["_id"]}, {"$set": {"rank": rank}})
         
+        # Send WhatsApp notification if user has phone number (non-blocking)
+        try:
+            from bson import ObjectId as ObjId
+            user_doc = await db.users.find_one({"_id": ObjId(user_id)}, {"phone_number": 1, "email": 1})
+            if user_doc and user_doc.get("phone_number"):
+                from services.twilio_service import twilio_service
+                import asyncio
+                asyncio.create_task(twilio_service.send_scan_complete(
+                    user_doc["phone_number"],
+                    user_doc.get("email", ""),
+                    float(overall_score) if overall_score else None
+                ))
+        except Exception as notif_err:
+            import logging
+            logging.getLogger(__name__).warning(f"Scan notification failed: {notif_err}")
+        
         return {"scan_id": scan_id, "analysis": analysis}
         
     except Exception as e:

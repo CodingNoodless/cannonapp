@@ -41,6 +41,22 @@ type Schedule = {
 };
 
 
+const formatTimeTo12Hour = (time24: string) => {
+  if (!time24 || typeof time24 !== 'string' || !time24.includes(':')) return time24 || '';
+  try {
+    const [hoursStr, minutesStr] = time24.split(':');
+    const hours = parseInt(hoursStr, 10);
+    const minutes = parseInt(minutesStr, 10);
+    if (isNaN(hours) || isNaN(minutes)) return time24;
+
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12;
+    return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+  } catch (e) {
+    return time24;
+  }
+};
+
 export default function ScheduleScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -137,7 +153,19 @@ export default function ScheduleScreen() {
     setSaving(true);
     try {
       const updates: any = {};
-      if (editTime !== editingTask.time) updates.time = editTime;
+
+      // Basic time validation
+      if (editTime !== editingTask.time) {
+        const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+        if (!timeRegex.test(editTime)) {
+          // Check if it's potentially 12-hour and try to convert or just Alert
+          Alert.alert('Invalid Format', 'Please use 24-hour format (HH:MM), e.g. 14:30');
+          setSaving(false);
+          return;
+        }
+        updates.time = editTime;
+      }
+
       if (editTitle !== editingTask.title) updates.title = editTitle;
       if (editDescription !== editingTask.description) updates.description = editDescription;
       const dur = parseInt(editDuration);
@@ -300,7 +328,7 @@ export default function ScheduleScreen() {
           const date = new Date(day.date + 'T00:00:00');
           const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
           const dayNum = date.getDate();
-          const dayCompleted = day.tasks.length > 0 && day.tasks.every(t => t.status === 'completed');
+          const dayCompleted = (day.tasks?.length ?? 0) > 0 && day.tasks?.every(t => t.status === 'completed');
           return (
             <TouchableOpacity
               key={day.day_number}
@@ -340,7 +368,7 @@ export default function ScheduleScreen() {
         </View>
 
         {/* Task cards */}
-        {selectedDay?.tasks.map((task) => {
+        {selectedDay?.tasks?.map((task) => {
           const isDone = task.status === 'completed';
           return (
             <View key={task.task_id} style={[styles.taskCard, isDone && styles.taskCardDone]}>
@@ -355,7 +383,7 @@ export default function ScheduleScreen() {
               {/* Content */}
               <View style={styles.taskContent}>
                 <View style={styles.taskHeader}>
-                  <Text style={[styles.taskTime, isDone && styles.taskTimeDone]}>{task.time}</Text>
+                  <Text style={[styles.taskTime, isDone && styles.taskTimeDone]}>{formatTimeTo12Hour(task.time)}</Text>
                   <View style={styles.taskTypeBadge}>
                     <Ionicons name={getTaskIcon(task.task_type) as any} size={12} color={colors.textMuted} />
                     <Text style={styles.taskTypeText}>{task.duration_minutes}m</Text>
@@ -397,14 +425,15 @@ export default function ScheduleScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.inputLabel}>TIME</Text>
+            <Text style={styles.inputLabel}>TIME (24-HOUR FORMAT)</Text>
             <TextInput
               style={styles.input}
               value={editTime}
               onChangeText={setEditTime}
-              placeholder="e.g. 08:30"
+              placeholder="e.g. 14:30"
               placeholderTextColor={colors.textMuted}
             />
+            <Text style={styles.caption}>Current display: {formatTimeTo12Hour(editTime) || 'Invalid'}</Text>
 
             <Text style={styles.inputLabel}>TITLE</Text>
             <TextInput
@@ -566,4 +595,5 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginTop: spacing.xl, ...shadows.md,
   },
   saveButtonText: { ...typography.button },
+  caption: { ...typography.caption, color: colors.textMuted, marginTop: 4 },
 });

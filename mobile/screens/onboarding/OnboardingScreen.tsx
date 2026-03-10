@@ -43,19 +43,21 @@ const SKIN_TYPES = [
 
 export default function OnboardingScreen() {
     const navigation = useNavigation<any>();
-    const { refreshUser } = useAuth();
+    const { user, refreshUser } = useAuth();
+
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
-    const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>('metric');
 
     // Form State
     const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
     const [gender, setGender] = useState('');
     const [age, setAge] = useState('');
-    const [height, setHeight] = useState(''); // cm or inches
-    const [heightFt, setHeightFt] = useState(''); // for imperial
-    const [heightIn, setHeightIn] = useState(''); // for imperial
-    const [weight, setWeight] = useState(''); // kg or lbs
+    const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>('metric');
+
+    const [height, setHeight] = useState('');
+    const [heightFt, setHeightFt] = useState('');
+    const [heightIn, setHeightIn] = useState('');
+    const [weight, setWeight] = useState('');
     const [activityLevel, setActivityLevel] = useState('');
     const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
     const [experience, setExperience] = useState('');
@@ -120,7 +122,7 @@ export default function OnboardingScreen() {
                 experience_level: experience,
                 skin_type: skinType,
                 unit_system: unitSystem,
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                timezone: typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC',
                 completed: true
             });
             await refreshUser();

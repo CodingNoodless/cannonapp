@@ -78,16 +78,17 @@ export default function ProfileScreen() {
                 </View>
 
                 <View style={styles.sectionContainer}>
-                    <Text style={styles.sectionLabel}>SCAN HISTORY</Text>
-                    <View style={styles.scanList}>
-                        {scans.length > 0 ? scans.map((scan, i) => (
-                            <TouchableOpacity key={i} style={styles.scanItem} onPress={() => navigation.navigate('ScanDetail', { scanId: scan.id })} activeOpacity={0.7}>
-                                <Ionicons name="scan" size={18} color={colors.textSecondary} />
-                                <View style={styles.scanInfo}><Text style={styles.scanDate}>{new Date(scan.created_at).toLocaleDateString()}</Text></View>
-                                <Text style={styles.scanScore}>{safeNumber(scan.overall_score)}</Text>
-                                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                            </TouchableOpacity>
-                        )) : <Text style={styles.emptyText}>No scans yet. Start your first scan!</Text>}
+                    <Text style={styles.sectionLabel}>ACCOUNT SETTINGS</Text>
+                    <View style={styles.settingsList}>
+                        <TouchableOpacity
+                            style={styles.settingsItem}
+                            onPress={() => navigation.navigate('EditPersonal')}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name="person-outline" size={18} color={colors.textSecondary} />
+                            <View style={styles.settingsInfo}><Text style={styles.settingsText}>Edit My Personal Info</Text></View>
+                            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -161,6 +162,13 @@ const styles = StyleSheet.create({
     emptyText: { fontSize: 13, color: colors.textMuted, textAlign: 'center', padding: spacing.lg },
     logoutButton: { alignItems: 'center', marginTop: spacing.xl, padding: spacing.md },
     logoutText: { fontSize: 14, fontWeight: '500', color: colors.error },
+    settingsList: {
+        backgroundColor: colors.card, borderRadius: borderRadius['2xl'],
+        padding: spacing.md, ...shadows.sm,
+    },
+    settingsItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md },
+    settingsInfo: { flex: 1, marginLeft: spacing.md },
+    settingsText: { fontSize: 14, color: colors.foreground, fontWeight: '500' },
     modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: spacing.lg },
     modalContent: {
         backgroundColor: colors.card, borderRadius: borderRadius['2xl'],

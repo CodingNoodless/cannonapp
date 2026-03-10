@@ -14,6 +14,15 @@ interface User {
         completed: boolean;
         goals: string[];
         experience_level: string;
+        age?: number;
+        gender?: string;
+        height?: number;
+        weight?: number;
+        activity_level?: string;
+        skin_type?: string;
+        equipment?: string[];
+        unit_system?: string;
+        timezone?: string;
     };
     profile: {
         current_level: number;

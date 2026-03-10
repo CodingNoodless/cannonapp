@@ -69,7 +69,15 @@ async def send_due_notifications():
 
                     # Check if task is due within the next 5 minutes
                     try:
-                        task_hour, task_min = map(int, task_time.split(":"))
+                        # Improved parsing to handle 12-hour format if it accidentally got saved
+                        task_time_clean = task_time.strip().upper()
+                        if "AM" in task_time_clean or "PM" in task_time_clean:
+                            from datetime import datetime as dt
+                            parsed_time = dt.strptime(task_time_clean, "%I:%M %p").time()
+                            task_hour, task_min = parsed_time.hour, parsed_time.minute
+                        else:
+                            task_hour, task_min = map(int, task_time_clean.split(":"))
+                        
                         task_dt = local_now.replace(hour=task_hour, minute=task_min, second=0, microsecond=0)
                         
                         reminder_offset = prefs.get("notification_minutes_before", 5)

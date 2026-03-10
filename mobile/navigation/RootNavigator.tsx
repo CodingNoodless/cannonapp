@@ -19,6 +19,7 @@ import FullResultScreen from '../screens/scan/FullResultScreen';
 import ScanDetailScreen from '../screens/scan/ScanDetailScreen';
 import PaymentScreen from '../screens/payment/PaymentScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
+import EditPersonalScreen from '../screens/profile/EditPersonalScreen';
 import CourseListScreen from '../screens/courses/CourseListScreen';
 import CourseDetailScreen from '../screens/courses/CourseDetailScreen';
 import ChapterViewScreen from '../screens/courses/ChapterViewScreen';
@@ -76,10 +77,12 @@ export function RootNavigator() {
                 // Main app (paid user)
                 <>
                     <Stack.Screen name="Main" component={TabNavigator} />
+                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     <Stack.Screen name="FaceScan" component={FaceScanScreen} />
                     <Stack.Screen name="FullResult" component={FullResultScreen} />
                     <Stack.Screen name="ScanDetail" component={ScanDetailScreen} />
                     <Stack.Screen name="Profile" component={ProfileScreen} />
+                    <Stack.Screen name="EditPersonal" component={EditPersonalScreen} />
 
                     {/* Course Screens */}
                     <Stack.Screen name="CourseList" component={CourseListScreen} />

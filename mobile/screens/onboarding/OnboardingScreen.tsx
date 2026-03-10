@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Animated, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
@@ -21,138 +21,439 @@ const EXPERIENCE = [
     { id: 'advanced', label: 'Advanced', desc: 'Experienced practitioner' },
 ];
 
+const ACTIVITY_LEVELS = [
+    { id: 'sedentary', label: 'Sedentary', desc: 'Little to no exercise' },
+    { id: 'light', label: 'Light', desc: '1-3 days/week' },
+    { id: 'moderate', label: 'Moderate', desc: '3-5 days/week' },
+    { id: 'active', label: 'Active', desc: '6-7 days/week' },
+];
+
+const EQUIPMENT = [
+    { id: 'none', label: 'None / Bodyweight', icon: 'hand-left' },
+    { id: 'dumbbells', label: 'Dumbbells', icon: 'barbell' },
+    { id: 'gym', label: 'Full Gym Access', icon: 'business' },
+];
+
+const SKIN_TYPES = [
+    { id: 'oily', label: 'Oily' },
+    { id: 'dry', label: 'Dry' },
+    { id: 'combination', label: 'Combination' },
+    { id: 'sensitive', label: 'Sensitive' },
+];
+
 export default function OnboardingScreen() {
     const navigation = useNavigation<any>();
     const { refreshUser } = useAuth();
-    const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
-    const [experience, setExperience] = useState('');
+    const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
+    const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>('metric');
+
+    // Form State
+    const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
+    const [gender, setGender] = useState('');
+    const [age, setAge] = useState('');
+    const [height, setHeight] = useState(''); // cm or inches
+    const [heightFt, setHeightFt] = useState(''); // for imperial
+    const [heightIn, setHeightIn] = useState(''); // for imperial
+    const [weight, setWeight] = useState(''); // kg or lbs
+    const [activityLevel, setActivityLevel] = useState('');
+    const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
+    const [experience, setExperience] = useState('');
+    const [skinType, setSkinType] = useState('');
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
-    const slideAnim = useRef(new Animated.Value(20)).current;
 
     useEffect(() => {
-        Animated.parallel([
-            Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-            Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-        ]).start();
-    }, []);
+        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    }, [step]);
 
-    const toggleGoal = (id: string) => {
-        setSelectedGoals((prev) => prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]);
+    const nextStep = () => {
+        if (step === 1 && selectedGoals.length === 0) { Alert.alert('Required', 'Please select at least one goal'); return; }
+        if (step === 2) {
+            if (!gender || !age || !weight) { Alert.alert('Required', 'Please fill in all physical profile fields'); return; }
+            if (unitSystem === 'metric' && !height) { Alert.alert('Required', 'Please fill in all physical profile fields'); return; }
+            if (unitSystem === 'imperial' && (!heightFt || !heightIn)) { Alert.alert('Required', 'Please fill in all physical profile fields'); return; }
+        }
+        if (step === 3 && (!activityLevel || selectedEquipment.length === 0)) { Alert.alert('Required', 'Please select activity level and equipment'); return; }
+
+        if (step < 4) {
+            Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+                setStep(step + 1);
+            });
+        } else {
+            handleFinish();
+        }
     };
 
-    const handleContinue = async () => {
-        if (selectedGoals.length === 0) { Alert.alert('Select Goals', 'Please select at least one goal'); return; }
-        if (!experience) { Alert.alert('Select Experience', 'Please select your experience level'); return; }
+    const prevStep = () => {
+        if (step > 1) {
+            Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+                setStep(step - 1);
+            });
+        }
+    };
+
+    const handleFinish = async () => {
+        if (!experience || !skinType) { Alert.alert('Required', 'Please complete the final step'); return; }
         setLoading(true);
+
+        let finalHeight = parseFloat(height);
+        let finalWeight = parseFloat(weight);
+
+        // Convert to metric for backend storage consistent with other users
+        if (unitSystem === 'imperial') {
+            const ft = parseInt(heightFt) || 0;
+            const inch = parseInt(heightIn) || 0;
+            finalHeight = (ft * 30.48) + (inch * 2.54);
+            finalWeight = parseFloat(weight) * 0.453592;
+        }
+
         try {
-            await api.saveOnboarding({ goals: selectedGoals, experience_level: experience });
+            await api.saveOnboarding({
+                goals: selectedGoals,
+                gender,
+                age: parseInt(age),
+                height: Math.round(finalHeight * 10) / 10,
+                weight: Math.round(finalWeight * 10) / 10,
+                activity_level: activityLevel,
+                equipment: selectedEquipment,
+                experience_level: experience,
+                skin_type: skinType,
+                unit_system: unitSystem,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                completed: true
+            });
             await refreshUser();
             navigation.navigate('FeaturesIntro');
-        } catch (error) { Alert.alert('Error', 'Could not save onboarding data'); }
-        finally { setLoading(false); }
+        } catch (error) {
+            Alert.alert('Error', 'Could not save your profile. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const renderStepContent = () => {
+        switch (step) {
+            case 1:
+                return (
+                    <View>
+                        <Text style={styles.title}>What are your goals?</Text>
+                        <Text style={styles.subtitle}>Select all the areas you want to optimize</Text>
+                        <View style={styles.goalsGrid}>
+                            {GOALS.map((goal) => {
+                                const selected = selectedGoals.includes(goal.id);
+                                return (
+                                    <TouchableOpacity
+                                        key={goal.id}
+                                        style={[styles.goalCard, selected && styles.goalCardSelected]}
+                                        onPress={() => setSelectedGoals(prev => prev.includes(goal.id) ? prev.filter(g => g !== goal.id) : [...prev, goal.id])}
+                                    >
+                                        <Ionicons name={goal.icon as any} size={24} color={selected ? colors.foreground : colors.textMuted} />
+                                        <Text style={[styles.goalLabel, selected && styles.goalLabelSelected]}>{goal.label}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </View>
+                );
+            case 2:
+                return (
+                    <View>
+                        <View style={styles.titleRow}>
+                            <Text style={styles.title}>Physical Profile</Text>
+                            <View style={styles.unitToggle}>
+                                <TouchableOpacity
+                                    onPress={() => setUnitSystem('metric')}
+                                    style={[styles.unitBtn, unitSystem === 'metric' && styles.unitBtnActive]}
+                                >
+                                    <Text style={[styles.unitLabel, unitSystem === 'metric' && styles.unitLabelActive]}>Metric</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => setUnitSystem('imperial')}
+                                    style={[styles.unitBtn, unitSystem === 'imperial' && styles.unitBtnActive]}
+                                >
+                                    <Text style={[styles.unitLabel, unitSystem === 'imperial' && styles.unitLabelActive]}>US</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                        <Text style={styles.subtitle}>Help Max understand your baseline</Text>
+
+                        <Text style={styles.inputLabel}>GENDER</Text>
+                        <View style={styles.row}>
+                            {['Male', 'Female', 'Other'].map(g => (
+                                <TouchableOpacity
+                                    key={g}
+                                    style={[styles.chip, gender === g && styles.chipSelected]}
+                                    onPress={() => setGender(g)}
+                                >
+                                    <Text style={[styles.chipText, gender === g && styles.chipTextSelected]}>{g}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <View style={styles.inputHalf}>
+                                <Text style={styles.inputLabel}>AGE</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Years"
+                                    placeholderTextColor={colors.textMuted}
+                                    keyboardType="numeric"
+                                    value={age}
+                                    onChangeText={setAge}
+                                />
+                            </View>
+                            <View style={styles.inputHalf}>
+                                <Text style={styles.inputLabel}>WEIGHT ({unitSystem === 'metric' ? 'KG' : 'LBS'})</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder={unitSystem === 'metric' ? "kg" : "lbs"}
+                                    placeholderTextColor={colors.textMuted}
+                                    keyboardType="numeric"
+                                    value={weight}
+                                    onChangeText={setWeight}
+                                />
+                            </View>
+                        </View>
+
+                        <Text style={styles.inputLabel}>HEIGHT ({unitSystem === 'metric' ? 'CM' : 'FT/IN'})</Text>
+                        {unitSystem === 'metric' ? (
+                            <TextInput
+                                style={styles.input}
+                                placeholder="cm"
+                                placeholderTextColor={colors.textMuted}
+                                keyboardType="numeric"
+                                value={height}
+                                onChangeText={setHeight}
+                            />
+                        ) : (
+                            <View style={styles.inputGroup}>
+                                <View style={styles.inputHalf}>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="ft"
+                                        placeholderTextColor={colors.textMuted}
+                                        keyboardType="numeric"
+                                        value={heightFt}
+                                        onChangeText={setHeightFt}
+                                    />
+                                </View>
+                                <View style={styles.inputHalf}>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="in"
+                                        placeholderTextColor={colors.textMuted}
+                                        keyboardType="numeric"
+                                        value={heightIn}
+                                        onChangeText={setHeightIn}
+                                    />
+                                </View>
+                            </View>
+                        )}
+                    </View>
+                );
+            case 3:
+                return (
+                    <View>
+                        <Text style={styles.title}>Lifestyle</Text>
+                        <Text style={styles.subtitle}>Let&apos;s talk about your routine</Text>
+
+                        <Text style={styles.inputLabel}>ACTIVITY LEVEL</Text>
+                        <View style={styles.list}>
+                            {ACTIVITY_LEVELS.map(level => (
+                                <TouchableOpacity
+                                    key={level.id}
+                                    style={[styles.listCard, activityLevel === level.id && styles.listCardSelected]}
+                                    onPress={() => setActivityLevel(level.id)}
+                                >
+                                    <View>
+                                        <Text style={styles.listLabel}>{level.label}</Text>
+                                        <Text style={styles.listDesc}>{level.desc}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <Text style={[styles.inputLabel, { marginTop: spacing.lg }]}>EQUIPMENT ACCESS</Text>
+                        <View style={styles.row}>
+                            {EQUIPMENT.map(item => {
+                                const selected = selectedEquipment.includes(item.id);
+                                return (
+                                    <TouchableOpacity
+                                        key={item.id}
+                                        style={[styles.goalCard, { width: '31%' }, selected && styles.goalCardSelected]}
+                                        onPress={() => setSelectedEquipment(prev => prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id])}
+                                    >
+                                        <Ionicons name={item.icon as any} size={20} color={selected ? colors.foreground : colors.textMuted} />
+                                        <Text style={styles.caption}>{item.label}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </View>
+                );
+            case 4:
+                return (
+                    <View>
+                        <Text style={styles.title}>Last Details</Text>
+                        <Text style={styles.subtitle}>Finalize your personalized profile</Text>
+
+                        <Text style={styles.inputLabel}>EXPERIENCE LEVEL</Text>
+                        <View style={styles.list}>
+                            {EXPERIENCE.map(exp => (
+                                <TouchableOpacity
+                                    key={exp.id}
+                                    style={[styles.listCard, experience === exp.id && styles.listCardSelected]}
+                                    onPress={() => setExperience(exp.id)}
+                                >
+                                    <View>
+                                        <Text style={styles.listLabel}>{exp.label}</Text>
+                                        <Text style={styles.listDesc}>{exp.desc}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <Text style={[styles.inputLabel, { marginTop: spacing.lg }]}>SKIN TYPE</Text>
+                        <View style={styles.flexRow}>
+                            {SKIN_TYPES.map(type => (
+                                <TouchableOpacity
+                                    key={type.id}
+                                    style={[styles.chip, skinType === type.id && styles.chipSelected]}
+                                    onPress={() => setSkinType(type.id)}
+                                >
+                                    <Text style={[styles.chipText, skinType === type.id && styles.chipTextSelected]}>{type.label}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                );
+        }
     };
 
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <ScrollView style={styles.container} contentContainerStyle={styles.content}>
                 <View style={styles.header}>
-                    <Text style={styles.stepLabel}>STEP 1 OF 2</Text>
-                    <Text style={styles.title}>What are your goals?</Text>
-                    <Text style={styles.subtitle}>Select all that apply</Text>
+                    <TouchableOpacity onPress={prevStep} disabled={step === 1} style={{ opacity: step === 1 ? 0 : 1 }}>
+                        <Ionicons name="arrow-back" size={24} color={colors.foreground} />
+                    </TouchableOpacity>
+                    <Text style={styles.stepIndicator}>Step {step} of 4</Text>
+                    <View style={{ width: 24 }} />
                 </View>
 
-                <View style={styles.goalsGrid}>
-                    {GOALS.map((goal) => {
-                        const selected = selectedGoals.includes(goal.id);
-                        return (
-                            <TouchableOpacity key={goal.id} style={[styles.goalCard, selected && styles.goalCardSelected]} onPress={() => toggleGoal(goal.id)} activeOpacity={0.7}>
-                                <Ionicons name={goal.icon as any} size={20} color={selected ? colors.foreground : colors.textMuted} />
-                                <Text style={[styles.goalLabel, selected && styles.goalLabelSelected]}>{goal.label}</Text>
-                            </TouchableOpacity>
-                        );
-                    })}
+                <View style={styles.progressBar}>
+                    <View style={[styles.progressIndicator, { width: `${(step / 4) * 100}%` }]} />
                 </View>
 
-                <View style={styles.divider} />
+                <Animated.View style={{ opacity: fadeAnim }}>
+                    {renderStepContent()}
+                </Animated.View>
 
-                <Text style={styles.sectionLabel}>EXPERIENCE LEVEL</Text>
-
-                <View style={styles.experienceList}>
-                    {EXPERIENCE.map((exp) => {
-                        const selected = experience === exp.id;
-                        return (
-                            <TouchableOpacity key={exp.id} style={[styles.expCard, selected && styles.expCardSelected]} onPress={() => setExperience(exp.id)} activeOpacity={0.7}>
-                                <View style={styles.expRow}>
-                                    <View style={[styles.radio, selected && styles.radioSelected]}>
-                                        {selected && <View style={styles.radioInner} />}
-                                    </View>
-                                    <View>
-                                        <Text style={[styles.expLabel, selected && styles.expLabelSelected]}>{exp.label}</Text>
-                                        <Text style={styles.expDesc}>{exp.desc}</Text>
-                                    </View>
-                                </View>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
-
-                <TouchableOpacity style={[styles.button, loading && { opacity: 0.5 }]} onPress={handleContinue} disabled={loading} activeOpacity={0.7}>
-                    <Text style={styles.buttonText}>{loading ? 'Saving...' : 'Continue'}</Text>
+                <TouchableOpacity
+                    style={[styles.button, { marginTop: spacing.xl }, loading && { opacity: 0.7 }]}
+                    onPress={nextStep}
+                    disabled={loading}
+                >
+                    <Text style={styles.buttonText}>{loading ? 'Finalizing...' : step === 4 ? 'Complete Profile' : 'Continue'}</Text>
                 </TouchableOpacity>
-            </Animated.View>
-        </ScrollView>
+            </ScrollView>
+        </KeyboardAvoidingView>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    content: { padding: spacing.lg, paddingTop: 80, paddingBottom: spacing.xxl },
-    header: { marginBottom: spacing.xl },
-    stepLabel: { ...typography.label, color: colors.textMuted, marginBottom: spacing.sm },
+    content: { padding: spacing.lg, paddingTop: 60, paddingBottom: 40 },
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+    stepIndicator: { ...typography.label, color: colors.textMuted },
+    progressBar: { height: 4, backgroundColor: colors.card, borderRadius: 2, marginBottom: 40 },
+    progressIndicator: { height: '100%', backgroundColor: colors.foreground, borderRadius: 2 },
     title: { ...typography.h1, marginBottom: spacing.xs },
-    subtitle: { ...typography.bodySmall },
+    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+    unitToggle: {
+        flexDirection: 'row',
+        backgroundColor: colors.card,
+        borderRadius: borderRadius.full,
+        padding: 4,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+    },
+    unitBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: borderRadius.full,
+    },
+    unitBtnActive: {
+        backgroundColor: colors.foreground,
+    },
+    unitLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.textMuted,
+    },
+    unitLabelActive: {
+        color: colors.background,
+    },
+    subtitle: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: 40 },
     goalsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     goalCard: {
         width: '31%',
         backgroundColor: colors.card,
         borderRadius: borderRadius.lg,
-        paddingVertical: spacing.md,
+        padding: spacing.md,
         alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'transparent',
         ...shadows.sm,
-        gap: spacing.xs,
     },
-    goalCardSelected: { backgroundColor: colors.accentMuted, ...shadows.md },
-    goalLabel: { ...typography.caption, color: colors.textSecondary },
+    goalCardSelected: { backgroundColor: colors.accentMuted, borderColor: colors.foreground },
+    goalLabel: { ...typography.caption, marginTop: spacing.xs, color: colors.textSecondary, textAlign: 'center' },
     goalLabelSelected: { color: colors.foreground, fontWeight: '600' },
-    divider: { height: 1, backgroundColor: colors.borderLight, marginVertical: spacing.xl },
-    sectionLabel: { ...typography.label, marginBottom: spacing.md },
-    experienceList: { gap: spacing.sm, marginBottom: spacing.xl },
-    expCard: {
+    inputLabel: { ...typography.label, color: colors.textMuted, marginBottom: spacing.sm, marginTop: spacing.md },
+    row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    flexRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    chip: {
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+    },
+    chipSelected: { backgroundColor: colors.foreground, borderColor: colors.foreground },
+    chipText: { ...typography.bodySmall, color: colors.textSecondary },
+    chipTextSelected: { color: colors.background, fontWeight: '600' },
+    inputGroup: { flexDirection: 'row', gap: spacing.md },
+    inputHalf: { flex: 1 },
+    input: {
+        backgroundColor: colors.card,
+        borderRadius: borderRadius.md,
+        padding: 16,
+        color: colors.foreground,
+        fontSize: 16,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+    },
+    list: { gap: spacing.sm },
+    listCard: {
         backgroundColor: colors.card,
         borderRadius: borderRadius.lg,
-        padding: spacing.md,
-        ...shadows.sm,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: 'transparent',
     },
-    expCardSelected: { backgroundColor: colors.accentMuted, ...shadows.md },
-    expRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-    radio: {
-        width: 20, height: 20, borderRadius: 10,
-        borderWidth: 2, borderColor: colors.border,
-        alignItems: 'center', justifyContent: 'center',
-    },
-    radioSelected: { borderColor: colors.foreground },
-    radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.foreground },
-    expLabel: { ...typography.body, fontWeight: '600' },
-    expLabelSelected: { color: colors.foreground },
-    expDesc: { ...typography.caption, marginTop: 2 },
+    listCardSelected: { backgroundColor: colors.accentMuted, borderColor: colors.foreground },
+    listLabel: { ...typography.body, fontWeight: '600', color: colors.foreground },
+    listDesc: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
     button: {
         backgroundColor: colors.foreground,
         borderRadius: borderRadius.full,
-        paddingVertical: 16,
+        paddingVertical: 18,
         alignItems: 'center',
         ...shadows.md,
     },
-    buttonText: { ...typography.button },
+    buttonText: { ...typography.button, color: colors.background },
+    caption: { ...typography.caption, color: colors.textMuted, textAlign: 'center', marginTop: 4 },
 });

@@ -30,7 +30,15 @@ class OnboardingData(BaseModel):
     """User onboarding questionnaire data"""
     goals: List[GoalType] = Field(default_factory=list)
     experience_level: ExperienceLevel = ExperienceLevel.BEGINNER
-    age_range: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    height: Optional[float] = None  # in cm
+    weight: Optional[float] = None  # in kg
+    activity_level: Optional[str] = None
+    skin_type: Optional[str] = None
+    equipment: List[str] = Field(default_factory=list)
+    unit_system: str = Field(default="metric", description="metric or imperial")
+    timezone: str = Field(default="UTC", description="IANA timezone name, e.g. America/New_York")
     completed: bool = False
 
 

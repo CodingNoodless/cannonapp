@@ -22,6 +22,7 @@ import ProfileScreen from '../screens/profile/ProfileScreen';
 import CourseListScreen from '../screens/courses/CourseListScreen';
 import CourseDetailScreen from '../screens/courses/CourseDetailScreen';
 import ChapterViewScreen from '../screens/courses/ChapterViewScreen';
+import ScheduleScreen from '../screens/courses/ScheduleScreen';
 import ChannelChatScreen from '../screens/forums/ChannelChatScreen';
 import TabNavigator from './TabNavigator';
 import AdminNavigator from './AdminNavigator';
@@ -84,6 +85,7 @@ export function RootNavigator() {
                     <Stack.Screen name="CourseList" component={CourseListScreen} />
                     <Stack.Screen name="CourseDetail" component={CourseDetailScreen} options={{ headerShown: false }} />
                     <Stack.Screen name="ChapterView" component={ChapterViewScreen} options={{ headerShown: false }} />
+                    <Stack.Screen name="Schedule" component={ScheduleScreen} options={{ headerShown: false }} />
                 </>
             )}
         </Stack.Navigator>

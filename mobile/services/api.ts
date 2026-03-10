@@ -5,7 +5,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { getItemAsync, setItemAsync, deleteItemAsync } from './storage';
 
-const API_BASE_URL = 'http://13.236.183.141:8000/api/';
+const API_BASE_URL = 'http://localhost:8000/api/';
 
 class ApiService {
     private client: AxiosInstance;
@@ -115,7 +115,20 @@ class ApiService {
     }
 
     // Onboarding
-    async saveOnboarding(data: { goals: string[]; experience_level: string }) {
+    async saveOnboarding(data: {
+        goals: string[];
+        experience_level: string;
+        gender?: string;
+        age?: number;
+        height?: number;
+        weight?: number;
+        activity_level?: string;
+        equipment?: string[];
+        skin_type?: string;
+        unit_system?: string;
+        timezone?: string;
+        completed?: boolean;
+    }) {
         const response = await this.client.post('users/onboarding', data);
         return response.data;
     }
@@ -322,6 +335,59 @@ class ApiService {
 
     async sendAdminUserChat(userId: string, message: string) {
         const response = await this.client.post(`admin/users/${userId}/chat`, { message });
+        return response.data;
+    }
+
+    // Schedules
+    async generateSchedule(courseId: string, moduleNumber: number, numDays: number = 7, preferences?: any) {
+        const response = await this.client.post('schedules/generate', {
+            course_id: courseId,
+            module_number: moduleNumber,
+            num_days: numDays,
+            preferences,
+        });
+        return response.data;
+    }
+
+    async getCurrentSchedule(courseId?: string, moduleNumber?: number) {
+        const response = await this.client.get('schedules/current', {
+            params: {
+                course_id: courseId,
+                module_number: moduleNumber
+            }
+        });
+        return response.data;
+    }
+
+    async getSchedule(scheduleId: string) {
+        const response = await this.client.get(`schedules/${scheduleId}`);
+        return response.data;
+    }
+
+    async completeScheduleTask(scheduleId: string, taskId: string, feedback?: string) {
+        const response = await this.client.put(`schedules/${scheduleId}/tasks/${taskId}/complete`, {
+            feedback,
+        });
+        return response.data;
+    }
+
+    async updateSchedulePreferences(preferences: any) {
+        const response = await this.client.put('schedules/preferences', preferences);
+        return response.data;
+    }
+
+    async adaptSchedule(scheduleId: string, feedback: string) {
+        const response = await this.client.post(`schedules/${scheduleId}/adapt`, { feedback });
+        return response.data;
+    }
+
+    async editScheduleTask(scheduleId: string, taskId: string, updates: { time?: string; title?: string; description?: string; duration_minutes?: number }) {
+        const response = await this.client.put(`schedules/${scheduleId}/tasks/${taskId}`, updates);
+        return response.data;
+    }
+
+    async deleteScheduleTask(scheduleId: string, taskId: string) {
+        const response = await this.client.delete(`schedules/${scheduleId}/tasks/${taskId}`);
         return response.data;
     }
 }

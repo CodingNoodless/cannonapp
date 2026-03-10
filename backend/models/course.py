@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+from models.schedule import ModuleGuideline
 
 
 class CourseCategory(str, Enum):
@@ -51,6 +52,7 @@ class CourseModule(BaseModel):
     description: str
     chapters: List[CourseChapter] = Field(default_factory=list)
     unlock_after_days: int = Field(default=0, description="Days from start to unlock")
+    guidelines: Optional[ModuleGuideline] = Field(default=None, description="Loose AI guidelines for schedule generation")
 
 
 class CourseCreate(BaseModel):

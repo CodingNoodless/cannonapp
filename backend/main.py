@@ -14,7 +14,7 @@ from db import mongo_client
 from api import (
     auth_router, users_router, scans_router, payments_router,
     courses_router, events_router, forums_router, chat_router, leaderboard_router,
-    admin_router, notifications_router
+    admin_router, notifications_router, schedules_router
 )
 
 
@@ -23,8 +23,12 @@ async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
     await mongo_client.connect()
+    # Start background scheduler for notifications
+    from services.scheduler_job import start_scheduler, stop_scheduler
+    scheduler = start_scheduler(app)
     yield
     # Shutdown
+    stop_scheduler(scheduler)
     await mongo_client.disconnect()
 
 
@@ -57,6 +61,7 @@ app.include_router(chat_router, prefix="/api")
 app.include_router(leaderboard_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
+app.include_router(schedules_router, prefix="/api")
 
 # Mount uploads directory
 uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")

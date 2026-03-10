@@ -204,14 +204,31 @@ CANNON_CHAT_SYSTEM_PROMPT = """You are Cannon, the founder and lead coach of the
 7. If user shares struggles, be empathetic but redirect to solutions
 8. Use the user's scan history if available for personalized advice
 
+## SCHEDULE MANAGEMENT:
+You can directly modify the user's active schedule if they ask for changes (e.g., "I'm busy tomorrow morning", "Move my workout to 6pm", "Add more facial exercises").
+When the user asks for such changes, use the `modify_schedule` tool.
+Always confirm with the user after you've successfully requested a schedule modification.
+
 ## CONTEXT:
 You have access to the user's:
 - Face scan results and scores
 - Current courses and progress
+- Current active schedule details
 - Chat history for context
 
 Remember: You're building a community of people committed to becoming their best selves. Every interaction should motivate and guide them forward.
 """
+
+
+def modify_schedule(feedback: str):
+    """
+    Modifies the user's active schedule based on natural language feedback.
+    Use this when the user asks to change, move, add, or remove tasks from their schedule.
+    
+    Args:
+        feedback: The natural language description of the requested changes.
+    """
+    return {"status": "success", "message": f"Successfully requested schedule adaptation with feedback: {feedback}"}
 
 
 class GeminiService:
@@ -219,7 +236,10 @@ class GeminiService:
     
     def __init__(self):
         genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel(settings.gemini_model)
+        self.model = genai.GenerativeModel(
+            settings.gemini_model,
+            tools=[modify_schedule]
+        )
         self.vision_model = genai.GenerativeModel(settings.gemini_model)
     
     async def analyze_face(
@@ -397,6 +417,15 @@ class GeminiService:
                 course = user_context["current_course"]
                 context_str += f"\n\nCurrent course: {course.get('title', 'N/A')}"
                 context_str += f"\nProgress: {course.get('progress_percentage', 0)}%"
+            
+            if user_context.get("active_schedule"):
+                schedule = user_context["active_schedule"]
+                context_str += f"\n\nUser's Active Schedule for {schedule.get('course_title', 'N/A')} (Module {schedule.get('module_number', 'N/A')}):"
+                # Simplified schedule view for context
+                for i, day in enumerate(schedule.get("days", [])[:3]): # Just first 3 days to save tokens
+                    context_str += f"\nDay {day.get('day_number')}: {len(day.get('tasks', []))} tasks"
+                    for t in day.get("tasks", []):
+                        context_str += f"\n  - {t.get('time')} {t.get('title')} ({t.get('status')})"
         
         # Build chat prompt
         chat_prompt = CANNON_CHAT_SYSTEM_PROMPT
@@ -435,7 +464,23 @@ class GeminiService:
         chat = self.model.start_chat(history=history_for_gemini)
         response = chat.send_message(new_message_parts)
         
-        return response.text
+        # Handle tool calls
+        tool_calls = []
+        response_text = ""
+        
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'function_call') and part.function_call:
+                tool_calls.append({
+                    "name": part.function_call.name,
+                    "args": dict(part.function_call.args)
+                })
+            elif hasattr(part, 'text') and part.text:
+                response_text += part.text
+        
+        return {
+            "text": response_text.strip() or "I've processed your request.",
+            "tool_calls": tool_calls
+        }
 
 
 # Singleton instance

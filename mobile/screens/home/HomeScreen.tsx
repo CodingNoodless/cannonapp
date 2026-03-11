@@ -10,6 +10,7 @@ export default function HomeScreen() {
     const navigation = useNavigation<any>();
     const { user } = useAuth();
     const [progress, setProgress] = useState<any[]>([]);
+    const [courses, setCourses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -25,12 +26,33 @@ export default function HomeScreen() {
     }, []);
 
     const loadData = async () => {
-        try { const progressRes = await api.getCourseProgress(); setProgress(progressRes.progress || []); }
-        catch (error) { console.error(error); }
-        finally { setLoading(false); }
+        try {
+            const [progressRes, coursesRes] = await Promise.all([
+                api.getCourseProgress(),
+                api.getCourses()
+            ]);
+            setProgress(progressRes.progress || []);
+            setCourses(coursesRes.courses || []);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const userName = user?.email?.split('@')[0] || 'there';
+    const userName = user?.first_name || user?.email?.split('@')[0] || 'there';
+
+    // Determine which maxxes to show based on user's onboarded goals
+    const selectedGoals: string[] = user?.onboarding?.goals || [];
+
+    // Map each goal to its corresponding course and find progress if any
+    const activeMaxxes = selectedGoals.map(goalId => {
+        // Find course matching the goal ID directly or by mapping (course category = goal string)
+        const course = courses.find(c => c.category?.toLowerCase() === goalId.toLowerCase() || c.id === goalId);
+        if (!course) return null;
+        const prog = progress.find(p => p.course_id === course.id);
+        return { course, progress: prog };
+    }).filter(Boolean) as { course: any, progress: any }[];
 
     return (
         <View style={styles.container}>
@@ -44,7 +66,7 @@ export default function HomeScreen() {
                             </View>
                             <TouchableOpacity style={styles.profileButton} onPress={() => navigation.navigate('Profile')} activeOpacity={0.7}>
                                 <View style={styles.profileIcon}>
-                                    <Text style={styles.profileInitial}>{userName.charAt(0).toUpperCase()}</Text>
+                                    <Text style={styles.profileInitial}>{(user?.first_name?.charAt(0) || user?.email?.charAt(0) || 'U').toUpperCase()}</Text>
                                 </View>
                             </TouchableOpacity>
                         </View>
@@ -52,37 +74,52 @@ export default function HomeScreen() {
 
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionLabel}>MY COURSES</Text>
-                            {progress.length > 0 && <Text style={styles.sectionCount}>{progress.length}</Text>}
+                            <Text style={styles.sectionLabel}>MY ACTIVE MAXXES</Text>
+                            {activeMaxxes.length > 0 && <Text style={styles.sectionCount}>{activeMaxxes.length}</Text>}
                         </View>
 
-                        {progress.map((p, i) => (
-                            <TouchableOpacity key={i} style={styles.courseCard} onPress={() => navigation.navigate('CourseDetail', { courseId: p.course_id })} activeOpacity={0.7}>
-                                <View style={styles.courseRow}>
-                                    <View style={styles.courseIcon}>
-                                        <Ionicons name={i % 2 === 0 ? "book-outline" : "water-outline"} size={16} color={colors.textSecondary} />
-                                    </View>
-                                    <View style={styles.courseContent}>
-                                        <Text style={styles.courseTitle} numberOfLines={1}>{p.course_title || 'Course'}</Text>
-                                        <View style={styles.progressRow}>
-                                            <View style={styles.progressBar}>
-                                                <View style={[styles.progressFill, { width: `${p.progress_percentage}%` }]} />
-                                            </View>
-                                            <Text style={styles.coursePercent}>{Math.round(p.progress_percentage)}%</Text>
+                        {activeMaxxes.map((item, i) => {
+                            const p = item.progress;
+                            const c = item.course;
+                            return (
+                                <TouchableOpacity key={c.id} style={styles.courseCard} onPress={() => navigation.navigate('CourseDetail', { courseId: c.id })} activeOpacity={0.7}>
+                                    <View style={styles.courseRow}>
+                                        <View style={styles.courseIcon}>
+                                            <Ionicons name={i % 2 === 0 ? "book-outline" : "water-outline"} size={16} color={colors.textSecondary} />
                                         </View>
+                                        <View style={styles.courseContent}>
+                                            <Text style={styles.courseTitle} numberOfLines={1}>{c.title}</Text>
+
+                                            {p ? (
+                                                <View style={styles.progressRow}>
+                                                    <View style={styles.progressBar}>
+                                                        <View style={[styles.progressFill, { width: `${Math.round(p.progress_percentage || 0)}%` }]} />
+                                                    </View>
+                                                    <Text style={styles.coursePercent}>{Math.round(p.progress_percentage || 0)}%</Text>
+                                                </View>
+                                            ) : (
+                                                <Text style={[styles.emptyDesc, { fontSize: 12, marginBottom: 0, textAlign: 'left' }]}>Tap to start maxxing</Text>
+                                            )}
+                                        </View>
+                                        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                                     </View>
-                                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                                </TouchableOpacity>
+                            );
+                        })}
+
+                        {activeMaxxes.length === 0 && (
+                            <TouchableOpacity style={styles.emptyCard} onPress={() => navigation.navigate('EditPersonal')} activeOpacity={0.7}>
+                                <Text style={styles.emptyTitle}>No Maxxes active</Text>
+                                <Text style={styles.emptyDesc}>Select a max goal in your profile to begin.</Text>
+                                <View style={styles.emptyButton}>
+                                    <Text style={styles.emptyButtonText}>Select Goals</Text>
                                 </View>
                             </TouchableOpacity>
-                        ))}
+                        )}
 
-                        {progress.length === 0 && (
-                            <TouchableOpacity style={styles.emptyCard} onPress={() => navigation.navigate('CourseList')} activeOpacity={0.7}>
-                                <Text style={styles.emptyTitle}>No courses yet</Text>
-                                <Text style={styles.emptyDesc}>Start your first course to begin your journey</Text>
-                                <View style={styles.emptyButton}>
-                                    <Text style={styles.emptyButtonText}>Browse Courses</Text>
-                                </View>
+                        {activeMaxxes.length > 0 && (
+                            <TouchableOpacity style={[styles.emptyButton, { marginTop: spacing.md, alignSelf: 'center' }]} onPress={() => navigation.navigate('EditPersonal')} activeOpacity={0.7}>
+                                <Text style={styles.emptyButtonText}>Add More Maxxes</Text>
                             </TouchableOpacity>
                         )}
                     </View>

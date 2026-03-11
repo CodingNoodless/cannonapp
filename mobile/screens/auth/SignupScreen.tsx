@@ -13,6 +13,9 @@ export default function SignupScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
+    const [username, setUsername] = useState('');
     const [bio, setBio] = useState('');
     const [phone, setPhone] = useState('');
     const [avatarUri, setAvatarUri] = useState<string | null>(null);
@@ -34,12 +37,17 @@ export default function SignupScreen() {
     };
 
     const handleSignup = async () => {
-        if (!email || !password || !confirmPassword) { Alert.alert('Error', 'Please fill in all required fields'); return; }
+        if (!email || !password || !confirmPassword || !firstName || !lastName || !username) { 
+            Alert.alert('Error', 'Please fill in all required fields'); 
+            return; 
+        }
         if (password !== confirmPassword) { Alert.alert('Error', 'Passwords do not match'); return; }
         if (password.length < 8) { Alert.alert('Error', 'Password must be at least 8 characters'); return; }
+        if (username.length < 3) { Alert.alert('Error', 'Username must be at least 3 characters'); return; }
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) { Alert.alert('Error', 'Username can only contain letters, numbers, and underscores'); return; }
         setLoading(true);
         try {
-            await signup(email, password, bio, phone || undefined);
+            await signup(email, password, firstName, lastName, username, bio, phone || undefined);
             if (avatarUri) { try { await api.uploadAvatar(avatarUri); } catch { Alert.alert('Note', 'Account created but profile picture could not be uploaded.'); } }
         } catch (error: any) { Alert.alert('Signup Failed', error.response?.data?.detail || 'Could not create account'); }
         finally { setLoading(false); }
@@ -64,6 +72,18 @@ export default function SignupScreen() {
                                 )}
                             </TouchableOpacity>
 
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>FIRST NAME</Text>
+                                <TextInput style={styles.input} placeholder="John" placeholderTextColor={colors.textMuted} value={firstName} onChangeText={setFirstName} autoCapitalize="words" />
+                            </View>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>LAST NAME</Text>
+                                <TextInput style={styles.input} placeholder="Doe" placeholderTextColor={colors.textMuted} value={lastName} onChangeText={setLastName} autoCapitalize="words" />
+                            </View>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>USERNAME</Text>
+                                <TextInput style={styles.input} placeholder="johndoe" placeholderTextColor={colors.textMuted} value={username} onChangeText={setUsername} autoCapitalize="none" />
+                            </View>
                             <View style={styles.inputGroup}>
                                 <Text style={styles.label}>EMAIL</Text>
                                 <TextInput style={styles.input} placeholder="you@example.com" placeholderTextColor={colors.textMuted} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />

@@ -5,13 +5,13 @@ Users API - Profile and Onboarding
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from datetime import datetime
 from bson import ObjectId
-from typing import List
+from typing import List, Optional
 
 from db import get_database
 from middleware import get_current_user
 from services.storage_service import storage_service
 from models.user import (
-    UserResponse, OnboardingData, UserProfile, GoalType, ExperienceLevel
+    UserResponse, OnboardingData, UserProfile, GoalType, ExperienceLevel, AccountUpdateRequest
 )
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -25,6 +25,9 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
     return UserResponse(
         id=current_user["id"],
         email=current_user["email"],
+        first_name=current_user.get("first_name"),
+        last_name=current_user.get("last_name"),
+        username=current_user.get("username"),
         created_at=current_user["created_at"],
         is_paid=current_user.get("is_paid", False),
         subscription_status=current_user.get("subscription_status"),
@@ -133,6 +136,67 @@ async def update_profile(
     )
     
     return {"message": "Profile updated"}
+
+
+@router.put("/account")
+async def update_account(
+    data: AccountUpdateRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update user account info (first_name, last_name, username)
+    Note: Email cannot be changed
+    """
+    db = get_database()
+    
+    update_fields = {}
+    
+    if data.first_name is not None:
+        update_fields["first_name"] = data.first_name.strip() if data.first_name.strip() else None
+    if data.last_name is not None:
+        update_fields["last_name"] = data.last_name.strip() if data.last_name.strip() else None
+    if data.username is not None:
+        username_clean = data.username.strip()
+        if username_clean:
+            # Validate username format
+            if len(username_clean) < 3:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username must be at least 3 characters"
+                )
+            if not username_clean.replace('_', '').isalnum():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username can only contain letters, numbers, and underscores"
+                )
+            # Check if username is already taken by another user
+            existing = await db.users.find_one({
+                "username": username_clean.lower(),
+                "_id": {"$ne": ObjectId(current_user["id"])}
+            })
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already taken"
+                )
+            update_fields["username"] = username_clean.lower()
+        else:
+            update_fields["username"] = None
+    
+    if not update_fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update"
+        )
+    
+    update_fields["updated_at"] = datetime.utcnow()
+    
+    await db.users.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": update_fields}
+    )
+    
+    return {"message": "Account updated"}
 
 
 @router.get("/goals", response_model=List[str])

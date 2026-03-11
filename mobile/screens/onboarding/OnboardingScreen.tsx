@@ -7,12 +7,11 @@ import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme/dark';
 
 const GOALS = [
-    { id: 'jawline', label: 'Jawline', icon: 'fitness' },
-    { id: 'fat_loss', label: 'Fat Loss', icon: 'body' },
-    { id: 'skin', label: 'Skin', icon: 'sparkles' },
-    { id: 'posture', label: 'Posture', icon: 'walk' },
-    { id: 'symmetry', label: 'Symmetry', icon: 'grid' },
-    { id: 'hair', label: 'Hair', icon: 'cut' },
+    { id: 'bonemax', label: 'Bonemax', icon: 'fitness-outline' },
+    { id: 'heightmax', label: 'Heightmax', icon: 'resize-outline' },
+    { id: 'skinmax', label: 'Skinmax', icon: 'sparkles-outline' },
+    { id: 'hairmax', label: 'Hairmax', icon: 'cut-outline' },
+    { id: 'fitmax', label: 'Fitmax', icon: 'body-outline' },
 ];
 
 const EXPERIENCE = [

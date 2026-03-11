@@ -77,8 +77,8 @@ class ApiService {
     }
 
     // Auth
-    async signup(email: string, password: string, bio?: string, phone_number?: string) {
-        const response = await this.client.post('auth/signup', { email, password, bio, phone_number });
+    async signup(email: string, password: string, first_name: string, last_name: string, username: string, bio?: string, phone_number?: string) {
+        const response = await this.client.post('auth/signup', { email, password, first_name, last_name, username, bio, phone_number });
         await this.setTokens(response.data.access_token, response.data.refresh_token);
         return response.data;
     }
@@ -111,6 +111,11 @@ class ApiService {
 
     async updateProfile(data: any) {
         const response = await this.client.put('users/profile', data);
+        return response.data;
+    }
+
+    async updateAccount(data: { first_name?: string; last_name?: string; username?: string }) {
+        const response = await this.client.put('users/account', data);
         return response.data;
     }
 

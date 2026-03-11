@@ -74,10 +74,21 @@ async def signup(user_data: UserCreate):
             detail="Email already registered"
         )
     
+    # Check if username exists
+    existing_username = await db.users.find_one({"username": user_data.username.lower()})
+    if existing_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already taken"
+        )
+    
     # Create user document
     user_doc = UserInDB(
         email=user_data.email.lower(),
         password_hash=hash_password(user_data.password),
+        first_name=user_data.first_name,
+        last_name=user_data.last_name,
+        username=user_data.username.lower(),
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
         is_paid=False,

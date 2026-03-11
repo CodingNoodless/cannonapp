@@ -7,12 +7,11 @@ import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme/dark';
 
 const GOALS = [
-  { id: 'jawline', label: 'Jawline', icon: 'fitness' },
-  { id: 'fat_loss', label: 'Fat Loss', icon: 'body' },
-  { id: 'skin', label: 'Skin', icon: 'sparkles' },
-  { id: 'posture', label: 'Posture', icon: 'walk' },
-  { id: 'symmetry', label: 'Symmetry', icon: 'grid' },
-  { id: 'hair', label: 'Hair', icon: 'cut' },
+  { id: 'bonemax', label: 'Bonemax', icon: 'fitness-outline' },
+  { id: 'heightmax', label: 'Heightmax', icon: 'resize-outline' },
+  { id: 'skinmax', label: 'Skinmax', icon: 'sparkles-outline' },
+  { id: 'hairmax', label: 'Hairmax', icon: 'cut-outline' },
+  { id: 'fitmax', label: 'Fitmax', icon: 'body-outline' },
 ];
 
 const EXPERIENCE = [
@@ -85,44 +84,115 @@ export default function EditPersonalScreen() {
   const [experience, setExperience] = useState(user?.onboarding?.experience_level || '');
   const [skinType, setSkinType] = useState(user?.onboarding?.skin_type || '');
 
-  const handleSave = async () => {
-    if (selectedGoals.length === 0 || !gender || !age || !weight || !activityLevel || selectedEquipment.length === 0 || !experience || !skinType) {
-      Alert.alert('Required', 'Please fill in all mandatory fields');
-      return;
+  // Update state when user data loads or changes
+  useEffect(() => {
+    if (user?.onboarding) {
+      const ob = user.onboarding;
+      setUnitSystem((ob.unit_system as any) || 'metric');
+      setSelectedGoals(ob.goals || []);
+      setGender(ob.gender || '');
+      setAge(ob.age?.toString() || '');
+      setActivityLevel(ob.activity_level || '');
+      setSelectedEquipment(ob.equipment || []);
+      setExperience(ob.experience_level || '');
+      setSkinType(ob.skin_type || '');
+      
+      // Update height and weight based on current unit system
+      const currentUnitSystem = (ob.unit_system as any) || 'metric';
+      if (currentUnitSystem === 'imperial') {
+        if (ob.weight) {
+          setWeight((ob.weight * 2.20462).toFixed(1));
+        }
+        if (ob.height) {
+          const totalInches = ob.height / 2.54;
+          setHeightFt(Math.floor(totalInches / 12).toString());
+          setHeightIn(Math.round(totalInches % 12).toString());
+          setHeight('');
+        }
+      } else {
+        setHeight(ob.height?.toString() || '');
+        setWeight(ob.weight?.toString() || '');
+        setHeightFt('');
+        setHeightIn('');
+      }
     }
+  }, [user]);
 
+  const handleSave = async () => {
     setLoading(true);
 
-    let finalHeight = parseFloat(height);
-    let finalWeight = parseFloat(weight);
+    let finalHeight: number | undefined = undefined;
+    let finalWeight: number | undefined = undefined;
 
     if (unitSystem === 'imperial') {
       const ft = parseInt(heightFt) || 0;
       const inch = parseInt(heightIn) || 0;
-      finalHeight = (ft * 30.48) + (inch * 2.54);
-      finalWeight = parseFloat(weight) * 0.453592;
+      if (ft > 0 || inch > 0) {
+        finalHeight = (ft * 30.48) + (inch * 2.54);
+      }
+      if (weight && parseFloat(weight) > 0) {
+        finalWeight = parseFloat(weight) * 0.453592;
+      }
+    } else {
+      if (height && parseFloat(height) > 0) {
+        finalHeight = parseFloat(height);
+      }
+      if (weight && parseFloat(weight) > 0) {
+        finalWeight = parseFloat(weight);
+      }
     }
 
+    // Prepare the data payload
+    const onboardingData: any = {
+      goals: selectedGoals || [],
+      experience_level: experience || 'beginner',
+      equipment: selectedEquipment || [],
+      unit_system: unitSystem,
+      timezone: user?.onboarding?.timezone || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'),
+      completed: true
+    };
+
+    // Only include optional fields if they have values
+    if (gender) onboardingData.gender = gender;
+    if (age && !isNaN(parseInt(age)) && parseInt(age) > 0) onboardingData.age = parseInt(age);
+    if (finalHeight !== undefined && finalHeight > 0) onboardingData.height = Math.round(finalHeight * 10) / 10;
+    if (finalWeight !== undefined && finalWeight > 0) onboardingData.weight = Math.round(finalWeight * 10) / 10;
+    if (activityLevel) onboardingData.activity_level = activityLevel;
+    if (skinType) onboardingData.skin_type = skinType;
+
     try {
-      await api.saveOnboarding({
-        goals: selectedGoals,
-        gender,
-        age: parseInt(age),
-        height: Math.round(finalHeight * 10) / 10,
-        weight: Math.round(finalWeight * 10) / 10,
-        activity_level: activityLevel,
-        equipment: selectedEquipment,
-        experience_level: experience,
-        skin_type: skinType,
-        unit_system: unitSystem,
-        timezone: user?.onboarding?.timezone || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'),
-        completed: true
-      });
+      console.log('Saving onboarding data:', JSON.stringify(onboardingData, null, 2));
+      const response = await api.saveOnboarding(onboardingData);
+      console.log('Save response:', response);
+      
+      // Wait a bit to ensure backend has processed
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       await refreshUser();
+      console.log('User refreshed after save');
+      
       Alert.alert('Success', 'Profile updated successfully!');
       navigation.goBack();
-    } catch (error) {
-      Alert.alert('Error', 'Could not save changes. Please try again.');
+    } catch (error: any) {
+      console.error('Error saving onboarding:', error);
+      console.error('Error response:', error?.response);
+      console.error('Error response data:', error?.response?.data);
+      
+      let errorMessage = 'Could not save changes. Please try again.';
+      
+      if (error?.response?.data) {
+        if (error.response.data.detail) {
+          errorMessage = Array.isArray(error.response.data.detail) 
+            ? error.response.data.detail.map((e: any) => e.msg || e).join(', ')
+            : error.response.data.detail;
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -135,9 +205,7 @@ export default function EditPersonalScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Personal Info</Text>
-        <TouchableOpacity onPress={handleSave} disabled={loading} style={styles.saveHeaderBtn}>
-          {loading ? <ActivityIndicator size="small" color={colors.accent} /> : <Text style={styles.saveHeaderText}>Save</Text>}
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -327,7 +395,6 @@ const styles = StyleSheet.create({
   listLabel: { ...typography.body, fontWeight: '600', color: colors.foreground },
   listDesc: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
   footer: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
     padding: spacing.lg, paddingBottom: Platform.OS === 'ios' ? 40 : 20,
     backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.borderLight,
   },

@@ -70,14 +70,14 @@ export default function TabNavigator() {
                 listeners={{
                     tabPress: (e) => {
                         e.preventDefault();
-                        navigation.navigate('FaceScan');
+                        navigation.navigate('Home');
                     },
                 }}
                 options={{
                     tabBarLabel: () => null,
                     tabBarIcon: () => (
                         <View style={styles.scanIcon}>
-                            <Ionicons name="add" size={22} color={colors.buttonText} />
+                            <Ionicons name="camera-outline" size={22} color={colors.buttonText} />
                         </View>
                     ),
                 }}

@@ -77,8 +77,8 @@ class ApiService {
     }
 
     // Auth
-    async signup(email: string, password: string, first_name: string, last_name: string, username: string, bio?: string, phone_number?: string) {
-        const response = await this.client.post('auth/signup', { email, password, first_name, last_name, username, bio, phone_number });
+    async signup(email: string, password: string, first_name: string, last_name: string, username: string, phone_number?: string) {
+        const response = await this.client.post('auth/signup', { email, password, first_name, last_name, username, phone_number });
         await this.setTokens(response.data.access_token, response.data.refresh_token);
         return response.data;
     }
@@ -109,6 +109,30 @@ class ApiService {
         return response.data;
     }
 
+    async uploadProgressPhoto(imageUri: string) {
+        const formData = new FormData();
+        // @ts-ignore - React Native FormData accepts { uri, name, type }
+        formData.append('file', {
+            uri: imageUri,
+            name: 'progress.jpg',
+            type: 'image/jpeg',
+        });
+        const response = await this.client.post('users/me/progress-photo', formData);
+        return response.data;
+    }
+
+    async uploadProgressPhotoBase64(imageBase64: string) {
+        const response = await this.client.post('users/me/progress-photo/base64', {
+            image_base64: imageBase64,
+        });
+        return response.data;
+    }
+
+    async getProgressPhotos() {
+        const response = await this.client.get('users/me/progress-photos');
+        return response.data;
+    }
+
     async updateProfile(data: any) {
         const response = await this.client.put('users/profile', data);
         return response.data;
@@ -135,6 +159,27 @@ class ApiService {
         completed?: boolean;
     }) {
         const response = await this.client.post('users/onboarding', data);
+        return response.data;
+    }
+
+    async saveOnboardingAnonymous(data: {
+        goals: string[];
+        experience_level: string;
+        gender?: string;
+        age?: number;
+        height?: number;
+        weight?: number;
+        activity_level?: string;
+        equipment?: string[];
+        skin_type?: string;
+        unit_system?: string;
+        timezone?: string;
+        completed?: boolean;
+    }) {
+        const response = await this.client.post('users/onboarding/anonymous', data, {
+            // explicitly avoid auth retry loops if token is missing
+            headers: { 'Content-Type': 'application/json' },
+        });
         return response.data;
     }
 

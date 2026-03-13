@@ -8,7 +8,20 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme/dark';
 
-interface Message { id: string; channel_id: string; user_id: string; user_email: string; content: string; attachment_url?: string; attachment_type?: string; created_at: string; is_admin: boolean; parent_id?: string; reactions?: Record<string, string[]>; }
+interface Message {
+    id: string;
+    channel_id: string;
+    user_id: string;
+    user_email: string;
+    username?: string;
+    content: string;
+    attachment_url?: string;
+    attachment_type?: string;
+    created_at: string;
+    is_admin: boolean;
+    parent_id?: string;
+    reactions?: Record<string, string[]>;
+}
 
 export default function ChannelChatScreen() {
     const navigation = useNavigation();
@@ -65,7 +78,13 @@ export default function ChannelChatScreen() {
         try { const result = await api.toggleReaction(channelId, messageId, emoji); setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions: result.reactions } : m)); } catch (e) { console.error(e); }
     };
 
-    const formatTime = (dateString: string) => new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const formatTime = (dateString: string) =>
+        new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const getDisplayName = (message: Message) => {
+        if (message.username && message.username.trim().length > 0) return message.username;
+        return message.user_email.split('@')[0];
+    };
 
     const renderMessage = ({ item, index }: { item: Message; index: number }) => {
         const prevMessage = index > 0 ? messages[index - 1] : null;
@@ -80,19 +99,32 @@ export default function ChannelChatScreen() {
                 {repliedMessage && (
                     <View style={[styles.replyContext, isCurrentUser ? styles.userReplyContext : styles.otherReplyContext]}>
                         {!isCurrentUser && <View style={styles.replyLine} />}
-                        <Text style={styles.replyContextText} numberOfLines={1}><Text style={styles.replyContextUser}>{repliedMessage.user_email.split('@')[0]}: </Text>{repliedMessage.content}</Text>
+                        <Text style={styles.replyContextText} numberOfLines={1}>
+                            <Text style={styles.replyContextUser}>{getDisplayName(repliedMessage)}: </Text>
+                            {repliedMessage.content}
+                        </Text>
                         {isCurrentUser && <View style={[styles.replyLine, { borderLeftWidth: 0, borderRightWidth: 2, marginRight: 0, marginLeft: 8, borderTopRightRadius: 4, borderTopLeftRadius: 0 }]} />}
                     </View>
                 )}
                 <View style={[styles.messageHeaderRow, isCurrentUser && styles.userMessageHeaderRow]}>
-                    {!isCurrentUser && showFullHeader && <View style={styles.avatarMini}><Text style={styles.avatarInitial}>{item.user_email[0].toUpperCase()}</Text></View>}
+                    {!isCurrentUser && showFullHeader && (
+                        <View style={styles.avatarMini}>
+                            <Text style={styles.avatarInitial}>{getDisplayName(item)[0]?.toUpperCase()}</Text>
+                        </View>
+                    )}
                     {!isCurrentUser && !showFullHeader && <View style={{ width: 40 }} />}
                     <View style={[styles.messageContentArea, isCurrentUser ? styles.userContentArea : styles.otherContentArea]}>
                         <View style={[styles.bubble, isCurrentUser ? styles.userBubble : styles.otherBubble, item.is_admin && styles.adminHighlight]}>
                             {showFullHeader && !isCurrentUser && (
                                 <View style={styles.nameRow}>
-                                    <Text style={[styles.userName, item.is_admin && styles.adminName]}>{item.user_email.split('@')[0]}</Text>
-                                    {item.is_admin && <View style={styles.adminTag}><Text style={styles.adminTagText}>ADMIN</Text></View>}
+                                    <Text style={[styles.userName, item.is_admin && styles.adminName]}>
+                                        {getDisplayName(item)}
+                                    </Text>
+                                    {item.is_admin && (
+                                        <View style={styles.adminTag}>
+                                            <Text style={styles.adminTagText}>ADMIN</Text>
+                                        </View>
+                                    )}
                                 </View>
                             )}
                             {item.content ? <Text style={[styles.messageText, isCurrentUser && styles.userMessageText]}>{item.content}</Text> : null}
@@ -129,7 +161,11 @@ export default function ChannelChatScreen() {
 
     if (loading && messages.length === 0) return <View style={[styles.container, styles.center]}><ActivityIndicator size="large" color={colors.foreground} /></View>;
 
-    const placeholderText = replyingTo ? `Replying to ${replyingTo.user_email}` : isAdminOnly && !isAdmin ? "Only admins can start announcements" : `Message #${channelName}`;
+    const placeholderText = replyingTo
+        ? `Replying to ${getDisplayName(replyingTo)}`
+        : isAdminOnly && !isAdmin
+        ? 'Only admins can start announcements'
+        : `Message #${channelName}`;
 
     return (
         <View style={styles.container}>
@@ -158,7 +194,17 @@ export default function ChannelChatScreen() {
 
                 {!isSearching && (isAdmin || !isAdminOnly || replyingTo) && (
                     <View style={[styles.inputWrapper, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
-                        {replyingTo && <View style={styles.replyPreview}><Text style={styles.replyPreviewText} numberOfLines={1}>Replying to <Text style={{ fontWeight: '600' }}>{replyingTo.user_email}</Text></Text><TouchableOpacity onPress={() => setReplyingTo(null)}><Ionicons name="close-circle" size={18} color={colors.textMuted} /></TouchableOpacity></View>}
+                        {replyingTo && (
+                            <View style={styles.replyPreview}>
+                                <Text style={styles.replyPreviewText} numberOfLines={1}>
+                                    Replying to{' '}
+                                    <Text style={{ fontWeight: '600' }}>{getDisplayName(replyingTo)}</Text>
+                                </Text>
+                                <TouchableOpacity onPress={() => setReplyingTo(null)}>
+                                    <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+                                </TouchableOpacity>
+                            </View>
+                        )}
                         {selectedImage && <View style={styles.imagePreviewContainer}><Image source={{ uri: selectedImage }} style={styles.imagePreview} /><TouchableOpacity style={styles.removeImageBtn} onPress={() => setSelectedImage(null)}><Ionicons name="close-circle" size={22} color={colors.error} /></TouchableOpacity>{uploading && <View style={styles.uploadOverlay}><ActivityIndicator color={colors.buttonText} /></View>}</View>}
                         <View style={styles.inputContainer}>
                             <TouchableOpacity style={styles.attachBtn} onPress={handlePickImage} disabled={uploading}><Ionicons name="add-circle" size={24} color={colors.textMuted} /></TouchableOpacity>

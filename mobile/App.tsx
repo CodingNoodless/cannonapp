@@ -4,9 +4,19 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { RootNavigator } from './navigation/RootNavigator';
 import { colors } from './theme/dark';
+
+function AppNavigator() {
+    const { isAuthenticated } = useAuth();
+    return (
+        <NavigationContainer key={isAuthenticated ? 'auth' : 'guest'}>
+            <StatusBar style="dark" />
+            <RootNavigator />
+        </NavigationContainer>
+    );
+}
 
 export default function App() {
     const [fontsLoaded] = useFonts({
@@ -25,10 +35,7 @@ export default function App() {
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
             <AuthProvider>
-                <NavigationContainer>
-                    <StatusBar style="dark" />
-                    <RootNavigator />
-                </NavigationContainer>
+                <AppNavigator />
             </AuthProvider>
         </GestureHandlerRootView>
     );

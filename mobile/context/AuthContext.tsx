@@ -44,7 +44,7 @@ interface AuthContextType {
     isAuthenticated: boolean;
     isPaid: boolean;
     login: (email: string, password: string) => Promise<void>;
-    signup: (email: string, password: string, first_name: string, last_name: string, username: string, bio?: string, phone_number?: string) => Promise<void>;
+    signup: (email: string, password: string, first_name: string, last_name: string, username: string, phone_number?: string) => Promise<void>;
     logout: () => Promise<void>;
     refreshUser: () => Promise<void>;
 }
@@ -79,8 +79,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userData);
     };
 
-    const signup = async (email: string, password: string, first_name: string, last_name: string, username: string, bio?: string, phone_number?: string) => {
-        await api.signup(email, password, first_name, last_name, username, bio, phone_number);
+    const signup = async (email: string, password: string, first_name: string, last_name: string, username: string, phone_number?: string) => {
+        await api.signup(email, password, first_name, last_name, username, phone_number);
         const userData = await api.getMe();
         setUser(userData);
     };

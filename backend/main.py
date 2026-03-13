@@ -40,13 +40,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# CORS middleware — in dev allow any localhost origin so Expo web (e.g. :8081) works
+_cors_origins = settings.cors_origins_list
+_cors_regex = r"https?://(localhost|127\.0\.0\.1)(:\d+)?$" if getattr(settings, "debug", True) else None
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
+    allow_origins=_cors_origins,
+    allow_origin_regex=_cors_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Include routers

@@ -45,14 +45,23 @@ export default function HomeScreen() {
     // Determine which maxxes to show based on user's onboarded goals
     const selectedGoals: string[] = user?.onboarding?.goals || [];
 
+    // Dummy module lists per maxx goal
+    const MODULES_BY_GOAL: Record<string, string[]> = {
+        fitmax: ['Workout plan', 'Nutrition basics', 'Cardio protocol'],
+        bonemax: ['Mewing fundamentals', 'Jawline exercises', 'Posture stack'],
+        heightmax: ['Spine decompression', 'Stretch routine', 'Growth safety'],
+        skinmax: ['Morning routine', 'Night routine', 'Acne protocol'],
+        hairmax: ['Wash routine', 'Topicals & meds', 'Microneedling plan'],
+    };
+
     // Map each goal to its corresponding course and find progress if any
     const activeMaxxes = selectedGoals.map(goalId => {
         // Find course matching the goal ID directly or by mapping (course category = goal string)
         const course = courses.find(c => c.category?.toLowerCase() === goalId.toLowerCase() || c.id === goalId);
         if (!course) return null;
         const prog = progress.find(p => p.course_id === course.id);
-        return { course, progress: prog };
-    }).filter(Boolean) as { course: any, progress: any }[];
+        return { course, progress: prog, goalId };
+    }).filter(Boolean) as { course: any, progress: any, goalId: string }[];
 
     return (
         <View style={styles.container}>
@@ -81,6 +90,7 @@ export default function HomeScreen() {
                         {activeMaxxes.map((item, i) => {
                             const p = item.progress;
                             const c = item.course;
+                            const modules = MODULES_BY_GOAL[item.goalId?.toLowerCase()] || [];
                             return (
                                 <TouchableOpacity key={c.id} style={styles.courseCard} onPress={() => navigation.navigate('CourseDetail', { courseId: c.id })} activeOpacity={0.7}>
                                     <View style={styles.courseRow}>
@@ -99,6 +109,16 @@ export default function HomeScreen() {
                                                 </View>
                                             ) : (
                                                 <Text style={[styles.emptyDesc, { fontSize: 12, marginBottom: 0, textAlign: 'left' }]}>Tap to start maxxing</Text>
+                                            )}
+
+                                            {modules.length > 0 && (
+                                                <View style={styles.moduleRow}>
+                                                    {modules.map((m) => (
+                                                        <View key={m} style={styles.modulePill}>
+                                                            <Text style={styles.moduleText}>{m}</Text>
+                                                        </View>
+                                                    ))}
+                                                </View>
                                             )}
                                         </View>
                                         <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -143,7 +163,7 @@ const styles = StyleSheet.create({
         ...shadows.sm,
     },
     profileInitial: { fontSize: 16, fontWeight: '600', color: colors.buttonText },
-    section: { paddingHorizontal: spacing.lg, marginTop: spacing.sm },
+    section: { paddingHorizontal: spacing.lg, marginTop: spacing.md },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
     sectionLabel: { ...typography.label },
     sectionCount: {
@@ -153,23 +173,41 @@ const styles = StyleSheet.create({
     },
     courseCard: {
         backgroundColor: colors.card,
-        borderRadius: borderRadius.lg,
-        padding: spacing.md,
-        marginBottom: spacing.sm,
-        ...shadows.sm,
+        borderRadius: borderRadius['2xl'],
+        paddingVertical: spacing.xl,
+        paddingHorizontal: spacing.lg,
+        marginBottom: spacing.md,
+        ...shadows.md,
     },
     courseRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     courseIcon: {
-        width: 36, height: 36, borderRadius: borderRadius.sm,
+        width: 48, height: 48, borderRadius: borderRadius.md,
         backgroundColor: colors.surface,
         alignItems: 'center', justifyContent: 'center',
     },
     courseContent: { flex: 1 },
-    courseTitle: { fontSize: 14, fontWeight: '600', color: colors.foreground, marginBottom: 6 },
+    courseTitle: { fontSize: 18, fontWeight: '700', color: colors.foreground, marginBottom: 8 },
     progressRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-    progressBar: { flex: 1, height: 3, backgroundColor: colors.borderLight, borderRadius: 2, overflow: 'hidden' },
-    progressFill: { height: '100%', backgroundColor: colors.foreground, borderRadius: 2 },
-    coursePercent: { fontSize: 12, fontWeight: '500', color: colors.textMuted, width: 32, textAlign: 'right' },
+    progressBar: { flex: 1, height: 6, backgroundColor: colors.borderLight, borderRadius: 3, overflow: 'hidden' },
+    progressFill: { height: '100%', backgroundColor: colors.foreground, borderRadius: 3 },
+    coursePercent: { fontSize: 13, fontWeight: '500', color: colors.textMuted, width: 40, textAlign: 'right' },
+    moduleRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: spacing.xs,
+        marginTop: spacing.sm,
+    },
+    modulePill: {
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: colors.surface,
+    },
+    moduleText: {
+        fontSize: 11,
+        fontWeight: '500',
+        color: colors.textSecondary,
+    },
     emptyCard: {
         backgroundColor: colors.card,
         borderRadius: borderRadius['2xl'],

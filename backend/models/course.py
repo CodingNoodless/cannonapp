@@ -11,6 +11,7 @@ from models.schedule import ModuleGuideline
 
 class CourseCategory(str, Enum):
     """Course category types"""
+    # Legacy / generic categories
     JAWLINE = "jawline"
     SKIN = "skin"
     FAT_LOSS = "fat_loss"
@@ -19,6 +20,13 @@ class CourseCategory(str, Enum):
     SKINCARE = "skincare"
     HAIR = "hair"
     MINDSET = "mindset"
+
+    # App-specific maxx tracks
+    BONEMAX = "bonemax"
+    HEIGHTMAX = "heightmax"
+    SKINMAX = "skinmax"
+    HAIRMAX = "hairmax"
+    FITMAX = "fitmax"
 
 
 class ChapterType(str, Enum):

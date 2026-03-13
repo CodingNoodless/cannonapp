@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, Alert, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, Alert, ActivityIndicator, Animated, FlatList } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -10,8 +10,13 @@ import { colors, spacing, borderRadius, typography, shadows } from '../../theme/
 export default function ProfileScreen() {
     const navigation = useNavigation<any>();
     const { user, logout, refreshUser } = useAuth();
+    const [loading, setLoading] = useState(true);
     const [scans, setScans] = useState<any[]>([]);
     const [myRank, setMyRank] = useState<any>(null);
+    const [progressPhotos, setProgressPhotos] = useState<any[]>([]);
+    const [progressModalVisible, setProgressModalVisible] = useState(false);
+    const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>(0);
+    const [uploadingProgress, setUploadingProgress] = useState(false);
     const [editModalVisible, setEditModalVisible] = useState(false);
     const [editBio, setEditBio] = useState('');
     const [editFirstName, setEditFirstName] = useState('');
@@ -27,7 +32,19 @@ export default function ProfileScreen() {
     }, []);
 
     const loadData = async () => {
-        try { const scanHistory = await api.getScanHistory().catch(() => ({ scans: [] })); setScans(scanHistory.scans || []); const rank = await api.getMyRank().catch(() => null); setMyRank(rank); } catch (e) { console.error(e); }
+        try {
+            const scanHistory = await api.getScanHistory().catch(() => ({ scans: [] }));
+            setScans(scanHistory.scans || []);
+            const rank = await api.getMyRank().catch(() => null);
+            setMyRank(rank);
+
+            const progressRes = await api.getProgressPhotos().catch(() => ({ photos: [] }));
+            setProgressPhotos(progressRes.photos || []);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleEditPress = () => { 
@@ -38,7 +55,41 @@ export default function ProfileScreen() {
         setEditAvatarUri(null); 
         setEditModalVisible(true); 
     };
-    const pickImage = async () => { const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.8 }); if (!result.canceled) setEditAvatarUri(result.assets[0].uri); };
+    const pickImage = async () => { const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 }); if (!result.canceled) setEditAvatarUri(result.assets[0].uri); };
+
+    const uploadProgressImage = async () => {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [3, 4],
+            quality: 0.9,
+            base64: true,
+        });
+        if (result.canceled) return;
+
+        const base64 = result.assets[0].base64;
+        const uri = result.assets[0].uri;
+        setUploadingProgress(true);
+        try {
+            if (base64) {
+                await api.uploadProgressPhotoBase64(base64);
+            } else {
+                await api.uploadProgressPhoto(uri);
+            }
+            const progressRes = await api.getProgressPhotos().catch(() => ({ photos: [] }));
+            setProgressPhotos(progressRes.photos || []);
+        } catch (e) {
+            console.error(e);
+            Alert.alert('Error', 'Could not upload progress photo. Please try again.');
+        } finally {
+            setUploadingProgress(false);
+        }
+    };
+
+    const openProgressArchiveAt = (index: number) => {
+        setSelectedPhotoIndex(index);
+        setProgressModalVisible(true);
+    };
 
     const saveProfile = async () => {
         setSaveLoading(true);
@@ -123,6 +174,58 @@ export default function ProfileScreen() {
 
     const safeNumber = (val: any, fallback: string = '-'): string => { const num = parseFloat(val); return isNaN(num) ? fallback : num.toFixed(1); };
 
+    const renderSkeleton = () => (
+        <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.header}>
+                <View style={styles.avatarSkeleton} />
+                <View style={styles.textSkeletonRow}>
+                    <View style={styles.textSkeletonLong} />
+                    <View style={styles.textSkeletonShort} />
+                </View>
+                <View style={styles.textSkeletonBio} />
+                <View style={styles.headerActionsRow}>
+                    <View style={styles.pillSkeleton} />
+                    <View style={styles.pillSkeleton} />
+                </View>
+            </View>
+
+            <View style={styles.statsCard}>
+                <View style={styles.statItem}>
+                    <View style={styles.statSkeleton} />
+                    <Text style={styles.statLabel}>Level</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                    <View style={styles.statSkeleton} />
+                    <Text style={styles.statLabel}>Rank</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                    <View style={styles.statSkeleton} />
+                    <Text style={styles.statLabel}>Scans</Text>
+                </View>
+            </View>
+
+            <View style={styles.sectionContainer}>
+                <Text style={styles.sectionLabel}>PROGRESS ARCHIVE</Text>
+                <View style={styles.archiveSkeletonRow}>
+                    <View style={styles.archiveSkeletonItem} />
+                    <View style={styles.archiveSkeletonItem} />
+                    <View style={styles.archiveSkeletonItem} />
+                </View>
+            </View>
+
+            <View style={styles.sectionContainer}>
+                <Text style={styles.sectionLabel}>ACCOUNT SETTINGS</Text>
+                <View style={styles.settingsList}>
+                    <View style={styles.settingsSkeletonItem} />
+                    <View style={styles.settingsSkeletonItem} />
+                    <View style={styles.settingsSkeletonItem} />
+                </View>
+            </View>
+        </ScrollView>
+    );
+
     return (
         <View style={styles.container}>
             <View style={styles.topBar}>
@@ -133,39 +236,86 @@ export default function ProfileScreen() {
                 <View style={{ width: 40 }} />
             </View>
 
-            <Animated.ScrollView showsVerticalScrollIndicator={false} style={{ opacity: fadeAnim }}>
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={handleEditPress} style={styles.avatarContainer}>
-                        {user?.profile?.avatar_url ? (
-                            <Image source={{ uri: user.profile.avatar_url }} style={styles.avatarImage} />
+            {loading ? (
+                renderSkeleton()
+            ) : (
+                <Animated.ScrollView showsVerticalScrollIndicator={false} style={{ opacity: fadeAnim }}>
+                    <View style={styles.header}>
+                        <TouchableOpacity onPress={handleEditPress} style={styles.avatarContainer}>
+                            {user?.profile?.avatar_url ? (
+                                <Image source={{ uri: user.profile.avatar_url }} style={styles.avatarImage} />
+                            ) : (
+                                <View style={styles.avatarPlaceholder}><Ionicons name="person" size={40} color={colors.textMuted} /></View>
+                            )}
+                        </TouchableOpacity>
+                        <Text style={styles.email}>{user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : user?.email}</Text>
+                        {user?.username && <Text style={styles.username}>@{user.username}</Text>}
+                        {user?.profile?.bio ? <Text style={styles.bio}>{user.profile.bio}</Text> : null}
+                        <View style={styles.headerActionsRow}>
+                            <TouchableOpacity style={styles.editPill} onPress={handleEditPress} activeOpacity={0.7}>
+                                <Text style={styles.editPillText}>Edit Profile</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.editPill, styles.progressPill]}
+                                onPress={uploadProgressImage}
+                                disabled={uploadingProgress}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="camera-outline" size={14} color={colors.textSecondary} />
+                                <Text style={[styles.editPillText, { marginLeft: 6 }]}>
+                                    {uploadingProgress ? 'Uploading...' : 'Add progress'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    <View style={styles.statsCard}>
+                        <View style={styles.statItem}><Text style={styles.statValue}>{safeNumber(user?.profile?.current_level)}</Text><Text style={styles.statLabel}>Level</Text></View>
+                        <View style={styles.statDivider} />
+                        <View style={styles.statItem}><Text style={styles.statValue}>{myRank?.rank !== null ? `#${myRank?.rank}` : '-'}</Text><Text style={styles.statLabel}>Rank</Text></View>
+                        <View style={styles.statDivider} />
+                        <View style={styles.statItem}><Text style={styles.statValue}>{scans.length}</Text><Text style={styles.statLabel}>Scans</Text></View>
+                    </View>
+
+                    <View style={styles.sectionContainer}>
+                        <Text style={styles.sectionLabel}>PROGRESS ARCHIVE</Text>
+                        {progressPhotos.length === 0 ? (
+                            <View style={styles.archiveEmptyCard}>
+                                <Text style={styles.emptyText}>
+                                    No progress pictures yet. Add one to start your private archive.
+                                </Text>
+                            </View>
                         ) : (
-                            <View style={styles.avatarPlaceholder}><Ionicons name="person" size={40} color={colors.textMuted} /></View>
+                            <FlatList
+                                data={progressPhotos}
+                                keyExtractor={(item) => item.id}
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.archiveList}
+                                renderItem={({ item, index }) => (
+                                    <TouchableOpacity
+                                        style={styles.archiveItem}
+                                        onPress={() => openProgressArchiveAt(index)}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Image source={{ uri: api.resolveAttachmentUrl(item.image_url) }} style={styles.archiveImage} />
+                                        <Text style={styles.archiveDate} numberOfLines={1}>
+                                            {new Date(item.created_at).toLocaleDateString()}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
+                            />
                         )}
-                    </TouchableOpacity>
-                    <Text style={styles.email}>{user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : user?.email}</Text>
-                    {user?.username && <Text style={styles.username}>@{user.username}</Text>}
-                    {user?.profile?.bio ? <Text style={styles.bio}>{user.profile.bio}</Text> : null}
-                    <TouchableOpacity style={styles.editPill} onPress={handleEditPress} activeOpacity={0.7}>
-                        <Text style={styles.editPillText}>Edit Profile</Text>
-                    </TouchableOpacity>
-                </View>
+                    </View>
 
-                <View style={styles.statsCard}>
-                    <View style={styles.statItem}><Text style={styles.statValue}>{safeNumber(user?.profile?.current_level)}</Text><Text style={styles.statLabel}>Level</Text></View>
-                    <View style={styles.statDivider} />
-                    <View style={styles.statItem}><Text style={styles.statValue}>{myRank?.rank !== null ? `#${myRank?.rank}` : '-'}</Text><Text style={styles.statLabel}>Rank</Text></View>
-                    <View style={styles.statDivider} />
-                    <View style={styles.statItem}><Text style={styles.statValue}>{scans.length}</Text><Text style={styles.statLabel}>Scans</Text></View>
-                </View>
-
-                <View style={styles.sectionContainer}>
-                    <Text style={styles.sectionLabel}>ACCOUNT SETTINGS</Text>
-                    <View style={styles.settingsList}>
-                        <TouchableOpacity
-                            style={styles.settingsItem}
-                            onPress={() => navigation.navigate('EditPersonal')}
-                            activeOpacity={0.7}
-                        >
+                    <View style={styles.sectionContainer}>
+                        <Text style={styles.sectionLabel}>ACCOUNT SETTINGS</Text>
+                        <View style={styles.settingsList}>
+                            <TouchableOpacity
+                                style={styles.settingsItem}
+                                onPress={() => navigation.navigate('EditPersonal')}
+                                activeOpacity={0.7}
+                            >
                             <Ionicons name="person-outline" size={18} color={colors.textSecondary} />
                             <View style={styles.settingsInfo}><Text style={styles.settingsText}>Edit My Personal Info</Text></View>
                             <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -178,6 +328,7 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
                 <View style={{ height: spacing.xxl }} />
             </Animated.ScrollView>
+            )}
 
             <Modal animationType="fade" transparent visible={editModalVisible} onRequestClose={() => setEditModalVisible(false)}>
                 <View style={styles.modalOverlay}>
@@ -209,6 +360,35 @@ export default function ProfileScreen() {
                     </View>
                 </View>
             </Modal>
+            <Modal
+                animationType="fade"
+                transparent
+                visible={progressModalVisible}
+                onRequestClose={() => setProgressModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.progressModalContent}>
+                        <TouchableOpacity
+                            style={styles.modalClose}
+                            onPress={() => setProgressModalVisible(false)}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name="close" size={18} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                        {progressPhotos[selectedPhotoIndex] && (
+                            <>
+                                <Image
+                                    source={{ uri: api.resolveAttachmentUrl(progressPhotos[selectedPhotoIndex].image_url) }}
+                                    style={styles.progressFullImage}
+                                />
+                                <Text style={styles.progressModalDate}>
+                                    {new Date(progressPhotos[selectedPhotoIndex].created_at).toLocaleString()}
+                                </Text>
+                            </>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -225,11 +405,61 @@ const styles = StyleSheet.create({
     avatarContainer: { position: 'relative' },
     avatarImage: { width: 88, height: 88, borderRadius: 44, ...shadows.md },
     avatarPlaceholder: { width: 88, height: 88, borderRadius: 44, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', ...shadows.sm },
+    avatarSkeleton: {
+        width: 88,
+        height: 88,
+        borderRadius: 44,
+        backgroundColor: colors.surfaceLight,
+        marginBottom: spacing.md,
+    },
     email: { fontSize: 15, fontWeight: '600', color: colors.foreground, marginTop: spacing.md },
     username: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
     bio: { fontSize: 13, color: colors.textSecondary, marginTop: 4, textAlign: 'center', paddingHorizontal: spacing.xxl },
-    editPill: { marginTop: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 8, borderRadius: borderRadius.full, backgroundColor: colors.card, ...shadows.sm },
+    textSkeletonRow: {
+        width: '60%',
+        alignItems: 'center',
+        gap: spacing.xs,
+        marginTop: spacing.sm,
+        marginBottom: spacing.sm,
+    },
+    textSkeletonLong: {
+        height: 14,
+        borderRadius: 999,
+        backgroundColor: colors.surfaceLight,
+        width: '100%',
+    },
+    textSkeletonShort: {
+        height: 12,
+        borderRadius: 999,
+        backgroundColor: colors.surfaceLight,
+        width: '70%',
+    },
+    textSkeletonBio: {
+        height: 32,
+        borderRadius: borderRadius.md,
+        backgroundColor: colors.surfaceLight,
+        width: '80%',
+        marginTop: spacing.sm,
+        marginBottom: spacing.lg,
+    },
+    headerActionsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        marginTop: spacing.md,
+    },
+    editPill: { paddingHorizontal: spacing.lg, paddingVertical: 8, borderRadius: borderRadius.full, backgroundColor: colors.card, ...shadows.sm },
+    progressPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     editPillText: { fontSize: 12, fontWeight: '500', color: colors.textSecondary },
+    pillSkeleton: {
+        flex: 1,
+        height: 32,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.surfaceLight,
+    },
     statsCard: {
         flexDirection: 'row', marginHorizontal: spacing.lg,
         backgroundColor: colors.card, borderRadius: borderRadius['2xl'],
@@ -239,6 +469,13 @@ const styles = StyleSheet.create({
     statValue: { fontSize: 24, fontWeight: '600', color: colors.foreground },
     statLabel: { ...typography.caption, marginTop: 4 },
     statDivider: { width: 1, backgroundColor: colors.borderLight },
+    statSkeleton: {
+        width: 40,
+        height: 20,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.surfaceLight,
+        marginBottom: spacing.xs,
+    },
     sectionContainer: { paddingHorizontal: spacing.lg, marginTop: spacing.xl },
     sectionLabel: { ...typography.label, marginBottom: spacing.md },
     scanList: {
@@ -250,8 +487,44 @@ const styles = StyleSheet.create({
     scanDate: { fontSize: 13, color: colors.textSecondary },
     scanScore: { fontSize: 16, fontWeight: '600', color: colors.foreground, marginRight: spacing.sm },
     emptyText: { fontSize: 13, color: colors.textMuted, textAlign: 'center', padding: spacing.lg },
+    archiveSkeletonRow: {
+        flexDirection: 'row',
+        gap: spacing.md,
+        marginTop: spacing.md,
+    },
+    archiveSkeletonItem: {
+        width: 88,
+        height: 112,
+        borderRadius: borderRadius.lg,
+        backgroundColor: colors.surfaceLight,
+    },
     logoutButton: { alignItems: 'center', marginTop: spacing.xl, padding: spacing.md },
     logoutText: { fontSize: 14, fontWeight: '500', color: colors.error },
+    archiveEmptyCard: {
+        backgroundColor: colors.card,
+        borderRadius: borderRadius['2xl'],
+        paddingVertical: spacing.lg,
+        paddingHorizontal: spacing.md,
+        ...shadows.sm,
+    },
+    archiveList: {
+        paddingVertical: spacing.sm,
+    },
+    archiveItem: {
+        alignItems: 'center',
+        marginRight: spacing.md,
+    },
+    archiveImage: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: colors.surface,
+    },
+    archiveDate: {
+        marginTop: 4,
+        fontSize: 11,
+        color: colors.textSecondary,
+    },
     settingsList: {
         backgroundColor: colors.card, borderRadius: borderRadius['2xl'],
         padding: spacing.md, ...shadows.sm,
@@ -259,6 +532,12 @@ const styles = StyleSheet.create({
     settingsItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md },
     settingsInfo: { flex: 1, marginLeft: spacing.md },
     settingsText: { fontSize: 14, color: colors.foreground, fontWeight: '500' },
+    settingsSkeletonItem: {
+        height: 40,
+        borderRadius: borderRadius.md,
+        backgroundColor: colors.surfaceLight,
+        marginBottom: spacing.sm,
+    },
     modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: spacing.lg },
     modalContent: {
         backgroundColor: colors.card, borderRadius: borderRadius['2xl'],
@@ -280,6 +559,26 @@ const styles = StyleSheet.create({
         opacity: 0.6, backgroundColor: colors.card,
     },
     bioInput: { backgroundColor: colors.surface, borderRadius: borderRadius.md, padding: spacing.md, color: colors.textPrimary, fontSize: 14, textAlignVertical: 'top', minHeight: 80 },
+    progressModalContent: {
+        backgroundColor: colors.card,
+        borderRadius: borderRadius['2xl'],
+        padding: spacing.md,
+        width: '88%',
+        maxHeight: '80%',
+        ...shadows.lg,
+        alignItems: 'center',
+    },
+    progressFullImage: {
+        width: '100%',
+        aspectRatio: 3 / 4,
+        borderRadius: borderRadius.lg,
+        backgroundColor: colors.surface,
+    },
+    progressModalDate: {
+        marginTop: spacing.sm,
+        fontSize: 12,
+        color: colors.textSecondary,
+    },
     modalButtons: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: spacing.lg, gap: spacing.md },
     cancelButton: { padding: spacing.md },
     cancelButtonText: { fontSize: 14, fontWeight: '500', color: colors.textMuted },

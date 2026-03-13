@@ -18,6 +18,7 @@ import BlurredResultScreen from '../screens/scan/BlurredResultScreen';
 import FullResultScreen from '../screens/scan/FullResultScreen';
 import ScanDetailScreen from '../screens/scan/ScanDetailScreen';
 import PaymentScreen from '../screens/payment/PaymentScreen';
+import PaymentThankYouScreen from '../screens/payment/PaymentThankYouScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import EditPersonalScreen from '../screens/profile/EditPersonalScreen';
 import CourseListScreen from '../screens/courses/CourseListScreen';
@@ -26,6 +27,7 @@ import ChapterViewScreen from '../screens/courses/ChapterViewScreen';
 import ScheduleScreen from '../screens/courses/ScheduleScreen';
 import ChannelChatScreen from '../screens/forums/ChannelChatScreen';
 import TabNavigator from './TabNavigator';
+import LandingScreen from '../screens/onboarding/LandingScreen';
 import AdminNavigator from './AdminNavigator';
 
 const Stack = createNativeStackNavigator();
@@ -41,11 +43,25 @@ export function RootNavigator() {
         );
     }
 
+    const initialRoute = !isAuthenticated
+        ? 'Landing'
+        : user?.is_admin
+            ? 'Admin'
+            : !isPaid
+                ? 'Payment'
+                : 'Main';
+
     return (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Navigator
+            key={isAuthenticated ? 'auth' : 'guest'}
+            screenOptions={{ headerShown: false }}
+            initialRouteName={initialRoute}
+        >
             {!isAuthenticated ? (
-                // Auth screens
+                // Pre-auth flow: landing -> onboarding -> auth
                 <>
+                    <Stack.Screen name="Landing" component={LandingScreen} />
+                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     <Stack.Screen name="Login" component={LoginScreen} />
                     <Stack.Screen name="Signup" component={SignupScreen} />
                 </>
@@ -54,33 +70,16 @@ export function RootNavigator() {
                 <>
                     <Stack.Screen name="Admin" component={AdminNavigator} />
                 </>
-            ) : !user?.onboarding?.completed ? (
-                // Onboarding flow
-                <>
-                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-                    <Stack.Screen name="FeaturesIntro" component={FeaturesIntroScreen} />
-                </>
-            ) : !user?.first_scan_completed ? (
-                // First scan flow (not paid yet)
-                <>
-                    <Stack.Screen name="FaceScan" component={FaceScanScreen} />
-                    <Stack.Screen name="BlurredResult" component={BlurredResultScreen} />
-                    <Stack.Screen name="Payment" component={PaymentScreen} />
-                </>
             ) : !isPaid ? (
-                // Blocked until payment
+                // Blocked until payment (no onboarding after sign-in)
                 <>
-                    <Stack.Screen name="BlurredResult" component={BlurredResultScreen} />
                     <Stack.Screen name="Payment" component={PaymentScreen} />
+                    <Stack.Screen name="PaymentThankYou" component={PaymentThankYouScreen} options={{ headerShown: false }} />
                 </>
             ) : (
-                // Main app (paid user)
+                // Main app (paid user) — no Onboarding screen so post-auth never shows it
                 <>
                     <Stack.Screen name="Main" component={TabNavigator} />
-                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-                    <Stack.Screen name="FaceScan" component={FaceScanScreen} />
-                    <Stack.Screen name="FullResult" component={FullResultScreen} />
-                    <Stack.Screen name="ScanDetail" component={ScanDetailScreen} />
                     <Stack.Screen name="Profile" component={ProfileScreen} />
                     <Stack.Screen name="EditPersonal" component={EditPersonalScreen} />
 

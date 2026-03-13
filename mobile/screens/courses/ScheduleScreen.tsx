@@ -510,8 +510,12 @@ const styles = StyleSheet.create({
   // Day selector
   daySelectorContainer: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm },
   dayPill: {
-    alignItems: 'center', paddingHorizontal: 14, paddingVertical: spacing.sm,
-    borderRadius: borderRadius.lg, backgroundColor: colors.card, ...shadows.sm, minWidth: 52,
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: spacing.xs, // slightly shorter height vs original
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.card,
+    minWidth: 52,
   },
   dayPillActive: { backgroundColor: colors.foreground },
   dayPillDone: { borderWidth: 1.5, borderColor: colors.success },

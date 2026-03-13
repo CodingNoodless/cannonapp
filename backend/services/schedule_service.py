@@ -8,6 +8,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional, List
+from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 from config import settings
@@ -133,6 +134,13 @@ class ScheduleService:
         user = await db.users.find_one({"_id": ObjectId(user_id)})
         user_history_context = await self._build_user_context(db, user_id, course_id)
 
+        # Resolve user's timezone for date calculations (used for schedule start dates)
+        tz_name = (user or {}).get("onboarding", {}).get("timezone", "UTC")
+        try:
+            user_tz = ZoneInfo(tz_name)
+        except Exception:
+            user_tz = ZoneInfo("UTC")
+
         # Parse preferences
         prefs = preferences or {}
         wake_time = prefs.get("wake_time", "07:00")
@@ -187,8 +195,8 @@ class ScheduleService:
                 task.setdefault("status", "pending")
                 task.setdefault("notification_sent", False)
 
-        # Assign dates starting from tomorrow
-        start_date = datetime.utcnow().date() + timedelta(days=1)
+        # Assign dates starting from "tomorrow" in the user's local timezone
+        start_date = datetime.now(user_tz).date() + timedelta(days=1)
         for day in schedule_data.get("days", []):
             day_num = day.get("day_number", 1)
             day["date"] = (start_date + timedelta(days=day_num - 1)).isoformat()

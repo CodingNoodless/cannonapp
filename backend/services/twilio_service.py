@@ -124,6 +124,17 @@ class TwilioService:
         )
         return bool(await self.send_whatsapp(phone, message))
 
+    async def send_daily_progress_prompt(self, phone: str, name: str | None = None) -> bool:
+        """Send a WhatsApp prompt asking the user for a daily progress picture"""
+        display_name = (name or "").split("@")[0].capitalize() if name else ""
+        greeting = f"Hey {display_name}," if display_name else "Hey,"
+        message = (
+            f"📸 {greeting} it's time for your daily progress check-in.\n\n"
+            f"Send a quick progress picture so Max can track your journey over time.\n\n"
+            f"Open the Max app to upload it to your private archive. 🔒"
+        )
+        return bool(await self.send_whatsapp(phone, message))
+
 
 # Singleton instance
 twilio_service = TwilioService()

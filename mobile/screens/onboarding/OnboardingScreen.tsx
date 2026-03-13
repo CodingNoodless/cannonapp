@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Animated, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    StyleSheet,
+    ScrollView,
+    Alert,
+    Animated,
+    TextInput,
+    KeyboardAvoidingView,
+    Platform,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
@@ -40,19 +51,20 @@ const SKIN_TYPES = [
     { id: 'sensitive', label: 'Sensitive' },
 ];
 
+const REQUIRED = ' · Required';
+
 export default function OnboardingScreen() {
     const navigation = useNavigation<any>();
-    const { user, refreshUser } = useAuth();
+    const { user, refreshUser, isAuthenticated } = useAuth() as any;
 
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
+    const [fieldError, setFieldError] = useState<string | null>(null);
 
-    // Form State
     const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
     const [gender, setGender] = useState('');
     const [age, setAge] = useState('');
     const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>('metric');
-
     const [height, setHeight] = useState('');
     const [heightFt, setHeightFt] = useState('');
     const [heightIn, setHeightIn] = useState('');
@@ -65,20 +77,86 @@ export default function OnboardingScreen() {
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+        setFieldError(null);
+        Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start();
     }, [step]);
 
-    const nextStep = () => {
-        if (step === 1 && selectedGoals.length === 0) { Alert.alert('Required', 'Please select at least one goal'); return; }
-        if (step === 2) {
-            if (!gender || !age || !weight) { Alert.alert('Required', 'Please fill in all physical profile fields'); return; }
-            if (unitSystem === 'metric' && !height) { Alert.alert('Required', 'Please fill in all physical profile fields'); return; }
-            if (unitSystem === 'imperial' && (!heightFt || !heightIn)) { Alert.alert('Required', 'Please fill in all physical profile fields'); return; }
+    const showError = (message: string) => {
+        setFieldError(message);
+        Alert.alert('Required', message);
+    };
+
+    const validateStep2 = (): boolean => {
+        if (!gender.trim()) {
+            showError('Please select your gender.');
+            return false;
         }
-        if (step === 3 && (!activityLevel || selectedEquipment.length === 0)) { Alert.alert('Required', 'Please select activity level and equipment'); return; }
+        const ageNum = parseInt(age, 10);
+        if (!age.trim() || isNaN(ageNum)) {
+            showError('Please enter your age.');
+            return false;
+        }
+        if (ageNum < 13 || ageNum > 120) {
+            showError('Please enter an age between 13 and 120.');
+            return false;
+        }
+        const weightNum = parseFloat(weight);
+        if (!weight.trim() || isNaN(weightNum) || weightNum <= 0) {
+            showError('Please enter a valid weight.');
+            return false;
+        }
+        if (unitSystem === 'metric') {
+            const heightNum = parseFloat(height);
+            if (!height.trim() || isNaN(heightNum) || heightNum <= 0) {
+                showError('Please enter a valid height in cm.');
+                return false;
+            }
+        } else {
+            const ft = parseInt(heightFt, 10) || 0;
+            const inch = parseInt(heightIn, 10) || 0;
+            if (ft <= 0 && inch <= 0) {
+                showError('Please enter your height in feet and inches.');
+                return false;
+            }
+        }
+        return true;
+    };
+
+    const nextStep = () => {
+        setFieldError(null);
+
+        if (step === 1) {
+            if (selectedGoals.length === 0) {
+                showError('Please select at least one goal.');
+                return;
+            }
+        }
+        if (step === 2) {
+            if (!validateStep2()) return;
+        }
+        if (step === 3) {
+            if (!activityLevel) {
+                showError('Please select your activity level.');
+                return;
+            }
+            if (selectedEquipment.length === 0) {
+                showError('Please select at least one equipment option.');
+                return;
+            }
+        }
+        if (step === 4) {
+            if (!experience) {
+                showError('Please select your experience level.');
+                return;
+            }
+            if (!skinType) {
+                showError('Please select your skin type.');
+                return;
+            }
+        }
 
         if (step < 4) {
-            Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+            Animated.timing(fadeAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
                 setStep(step + 1);
             });
         } else {
@@ -87,33 +165,33 @@ export default function OnboardingScreen() {
     };
 
     const prevStep = () => {
+        setFieldError(null);
         if (step > 1) {
-            Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+            Animated.timing(fadeAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
                 setStep(step - 1);
             });
         }
     };
 
     const handleFinish = async () => {
-        if (!experience || !skinType) { Alert.alert('Required', 'Please complete the final step'); return; }
         setLoading(true);
+        setFieldError(null);
 
-        let finalHeight = parseFloat(height);
-        let finalWeight = parseFloat(weight);
+        let finalHeight = parseFloat(height) || 0;
+        let finalWeight = parseFloat(weight) || 0;
 
-        // Convert to metric for backend storage consistent with other users
         if (unitSystem === 'imperial') {
-            const ft = parseInt(heightFt) || 0;
-            const inch = parseInt(heightIn) || 0;
-            finalHeight = (ft * 30.48) + (inch * 2.54);
-            finalWeight = parseFloat(weight) * 0.453592;
+            const ft = parseInt(heightFt, 10) || 0;
+            const inch = parseInt(heightIn, 10) || 0;
+            finalHeight = ft * 30.48 + inch * 2.54;
+            finalWeight = finalWeight * 0.453592;
         }
 
         try {
-            await api.saveOnboarding({
+            const payload = {
                 goals: selectedGoals,
-                gender,
-                age: parseInt(age),
+                gender: gender.trim(),
+                age: parseInt(age, 10),
                 height: Math.round(finalHeight * 10) / 10,
                 weight: Math.round(finalWeight * 10) / 10,
                 activity_level: activityLevel,
@@ -122,11 +200,19 @@ export default function OnboardingScreen() {
                 skin_type: skinType,
                 unit_system: unitSystem,
                 timezone: typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC',
-                completed: true
-            });
-            await refreshUser();
-            navigation.navigate('FeaturesIntro');
+                completed: true,
+            };
+
+            if (isAuthenticated) {
+                await api.saveOnboarding(payload);
+                await refreshUser();
+                navigation.navigate('FeaturesIntro');
+            } else {
+                const res = await api.saveOnboardingAnonymous(payload);
+                navigation.navigate('Login', { onboarding: res.data });
+            }
         } catch (error) {
+            setFieldError('Could not save. Please try again.');
             Alert.alert('Error', 'Could not save your profile. Please try again.');
         } finally {
             setLoading(false);
@@ -137,9 +223,10 @@ export default function OnboardingScreen() {
         switch (step) {
             case 1:
                 return (
-                    <View>
+                    <View style={styles.stepBlock}>
                         <Text style={styles.title}>What are your goals?</Text>
-                        <Text style={styles.subtitle}>Select all the areas you want to optimize</Text>
+                        <Text style={styles.subtitle}>Select all the areas you want to optimize.</Text>
+                        <Text style={styles.requiredLabel}>Goals{REQUIRED}</Text>
                         <View style={styles.goalsGrid}>
                             {GOALS.map((goal) => {
                                 const selected = selectedGoals.includes(goal.id);
@@ -147,216 +234,216 @@ export default function OnboardingScreen() {
                                     <TouchableOpacity
                                         key={goal.id}
                                         style={[styles.goalCard, selected && styles.goalCardSelected]}
-                                        onPress={() => setSelectedGoals(prev => prev.includes(goal.id) ? prev.filter(g => g !== goal.id) : [...prev, goal.id])}
+                                        onPress={() => setSelectedGoals((prev) => (prev.includes(goal.id) ? prev.filter((g) => g !== goal.id) : [...prev, goal.id]))}
+                                        activeOpacity={0.8}
                                     >
-                                        <Ionicons name={goal.icon as any} size={24} color={selected ? colors.foreground : colors.textMuted} />
+                                        <Ionicons name={goal.icon as any} size={26} color={selected ? colors.foreground : colors.textMuted} />
                                         <Text style={[styles.goalLabel, selected && styles.goalLabelSelected]}>{goal.label}</Text>
                                     </TouchableOpacity>
                                 );
                             })}
                         </View>
+                        {fieldError && step === 1 ? <Text style={styles.inlineError}>{fieldError}</Text> : null}
                     </View>
                 );
             case 2:
                 return (
-                    <View>
+                    <View style={styles.stepBlock}>
+                        <Text style={styles.title}>Physical profile</Text>
+                        <Text style={styles.subtitle}>Help Max tailor your plan.</Text>
+
                         <View style={styles.titleRow}>
-                            <Text style={styles.title}>Physical Profile</Text>
+                            <Text style={styles.requiredLabel}>Gender{REQUIRED}</Text>
                             <View style={styles.unitToggle}>
-                                <TouchableOpacity
-                                    onPress={() => setUnitSystem('metric')}
-                                    style={[styles.unitBtn, unitSystem === 'metric' && styles.unitBtnActive]}
-                                >
+                                <TouchableOpacity onPress={() => setUnitSystem('metric')} style={[styles.unitBtn, unitSystem === 'metric' && styles.unitBtnActive]} activeOpacity={0.8}>
                                     <Text style={[styles.unitLabel, unitSystem === 'metric' && styles.unitLabelActive]}>Metric</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity
-                                    onPress={() => setUnitSystem('imperial')}
-                                    style={[styles.unitBtn, unitSystem === 'imperial' && styles.unitBtnActive]}
-                                >
+                                <TouchableOpacity onPress={() => setUnitSystem('imperial')} style={[styles.unitBtn, unitSystem === 'imperial' && styles.unitBtnActive]} activeOpacity={0.8}>
                                     <Text style={[styles.unitLabel, unitSystem === 'imperial' && styles.unitLabelActive]}>US</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
-                        <Text style={styles.subtitle}>Help Max understand your baseline</Text>
-
-                        <Text style={styles.inputLabel}>GENDER</Text>
-                        <View style={styles.row}>
-                            {['Male', 'Female', 'Other'].map(g => (
+                        <View style={styles.chipRow}>
+                            {['Male', 'Female', 'Other'].map((g) => (
                                 <TouchableOpacity
                                     key={g}
                                     style={[styles.chip, gender === g && styles.chipSelected]}
                                     onPress={() => setGender(g)}
+                                    activeOpacity={0.8}
                                 >
                                     <Text style={[styles.chipText, gender === g && styles.chipTextSelected]}>{g}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
 
-                        <View style={styles.inputGroup}>
-                            <View style={styles.inputHalf}>
-                                <Text style={styles.inputLabel}>AGE</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Years"
-                                    placeholderTextColor={colors.textMuted}
-                                    keyboardType="numeric"
-                                    value={age}
-                                    onChangeText={setAge}
-                                />
-                            </View>
-                            <View style={styles.inputHalf}>
-                                <Text style={styles.inputLabel}>WEIGHT ({unitSystem === 'metric' ? 'KG' : 'LBS'})</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder={unitSystem === 'metric' ? "kg" : "lbs"}
-                                    placeholderTextColor={colors.textMuted}
-                                    keyboardType="numeric"
-                                    value={weight}
-                                    onChangeText={setWeight}
-                                />
-                            </View>
-                        </View>
+                        <Text style={styles.requiredLabel}>Age{REQUIRED}</Text>
+                        <TextInput
+                            style={[styles.input, !age.trim() && fieldError ? styles.inputError : undefined]}
+                            placeholder="e.g. 25"
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="numeric"
+                            value={age}
+                            onChangeText={(t) => { setAge(t); setFieldError(null); }}
+                        />
 
-                        <Text style={styles.inputLabel}>HEIGHT ({unitSystem === 'metric' ? 'CM' : 'FT/IN'})</Text>
+                        <Text style={styles.requiredLabel}>Weight ({unitSystem === 'metric' ? 'kg' : 'lbs'}){REQUIRED}</Text>
+                        <TextInput
+                            style={[styles.input, !weight.trim() && fieldError ? styles.inputError : undefined]}
+                            placeholder={unitSystem === 'metric' ? 'e.g. 70' : 'e.g. 154'}
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="decimal-pad"
+                            value={weight}
+                            onChangeText={(t) => { setWeight(t); setFieldError(null); }}
+                        />
+
+                        <Text style={styles.requiredLabel}>Height ({unitSystem === 'metric' ? 'cm' : 'ft / in'}){REQUIRED}</Text>
                         {unitSystem === 'metric' ? (
                             <TextInput
-                                style={styles.input}
-                                placeholder="cm"
+                                style={[styles.input, !height.trim() && fieldError ? styles.inputError : undefined]}
+                                placeholder="e.g. 175"
                                 placeholderTextColor={colors.textMuted}
-                                keyboardType="numeric"
+                                keyboardType="decimal-pad"
                                 value={height}
-                                onChangeText={setHeight}
+                                onChangeText={(t) => { setHeight(t); setFieldError(null); }}
                             />
                         ) : (
-                            <View style={styles.inputGroup}>
-                                <View style={styles.inputHalf}>
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="ft"
-                                        placeholderTextColor={colors.textMuted}
-                                        keyboardType="numeric"
-                                        value={heightFt}
-                                        onChangeText={setHeightFt}
-                                    />
-                                </View>
-                                <View style={styles.inputHalf}>
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="in"
-                                        placeholderTextColor={colors.textMuted}
-                                        keyboardType="numeric"
-                                        value={heightIn}
-                                        onChangeText={setHeightIn}
-                                    />
-                                </View>
+                            <View style={styles.inputRow}>
+                                <TextInput
+                                    style={[styles.input, styles.inputHalf, !heightFt && fieldError ? styles.inputError : undefined]}
+                                    placeholder="ft"
+                                    placeholderTextColor={colors.textMuted}
+                                    keyboardType="number-pad"
+                                    value={heightFt}
+                                    onChangeText={(t) => { setHeightFt(t); setFieldError(null); }}
+                                />
+                                <TextInput
+                                    style={[styles.input, styles.inputHalf, !heightIn && fieldError ? styles.inputError : undefined]}
+                                    placeholder="in"
+                                    placeholderTextColor={colors.textMuted}
+                                    keyboardType="number-pad"
+                                    value={heightIn}
+                                    onChangeText={(t) => { setHeightIn(t); setFieldError(null); }}
+                                />
                             </View>
                         )}
+                        {fieldError && step === 2 ? <Text style={styles.inlineError}>{fieldError}</Text> : null}
                     </View>
                 );
             case 3:
                 return (
-                    <View>
+                    <View style={styles.stepBlock}>
                         <Text style={styles.title}>Lifestyle</Text>
-                        <Text style={styles.subtitle}>Let&apos;s talk about your routine</Text>
+                        <Text style={styles.subtitle}>Activity and equipment help us personalize your plan.</Text>
 
-                        <Text style={styles.inputLabel}>ACTIVITY LEVEL</Text>
+                        <Text style={styles.requiredLabel}>Activity level{REQUIRED}</Text>
                         <View style={styles.list}>
-                            {ACTIVITY_LEVELS.map(level => (
+                            {ACTIVITY_LEVELS.map((level) => (
                                 <TouchableOpacity
                                     key={level.id}
                                     style={[styles.listCard, activityLevel === level.id && styles.listCardSelected]}
                                     onPress={() => setActivityLevel(level.id)}
+                                    activeOpacity={0.8}
                                 >
-                                    <View>
-                                        <Text style={styles.listLabel}>{level.label}</Text>
-                                        <Text style={styles.listDesc}>{level.desc}</Text>
-                                    </View>
+                                    <Text style={styles.listLabel}>{level.label}</Text>
+                                    <Text style={styles.listDesc}>{level.desc}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
 
-                        <Text style={[styles.inputLabel, { marginTop: spacing.lg }]}>EQUIPMENT ACCESS</Text>
-                        <View style={styles.row}>
-                            {EQUIPMENT.map(item => {
+                        <Text style={styles.requiredLabel}>Equipment access{REQUIRED}</Text>
+                        <Text style={styles.hint}>Select at least one.</Text>
+                        <View style={styles.equipRow}>
+                            {EQUIPMENT.map((item) => {
                                 const selected = selectedEquipment.includes(item.id);
                                 return (
                                     <TouchableOpacity
                                         key={item.id}
-                                        style={[styles.goalCard, { width: '31%' }, selected && styles.goalCardSelected]}
-                                        onPress={() => setSelectedEquipment(prev => prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id])}
+                                        style={[styles.equipCard, selected && styles.goalCardSelected]}
+                                        onPress={() => setSelectedEquipment((prev) => (prev.includes(item.id) ? prev.filter((i) => i !== item.id) : [...prev, item.id]))}
+                                        activeOpacity={0.8}
                                     >
-                                        <Ionicons name={item.icon as any} size={20} color={selected ? colors.foreground : colors.textMuted} />
-                                        <Text style={styles.caption}>{item.label}</Text>
+                                        <Ionicons name={item.icon as any} size={22} color={selected ? colors.foreground : colors.textMuted} />
+                                        <Text style={[styles.caption, selected && styles.goalLabelSelected]}>{item.label}</Text>
                                     </TouchableOpacity>
                                 );
                             })}
                         </View>
+                        {fieldError && step === 3 ? <Text style={styles.inlineError}>{fieldError}</Text> : null}
                     </View>
                 );
             case 4:
                 return (
-                    <View>
-                        <Text style={styles.title}>Last Details</Text>
-                        <Text style={styles.subtitle}>Finalize your personalized profile</Text>
+                    <View style={styles.stepBlock}>
+                        <Text style={styles.title}>Last details</Text>
+                        <Text style={styles.subtitle}>Finalize your profile so Max can coach you better.</Text>
 
-                        <Text style={styles.inputLabel}>EXPERIENCE LEVEL</Text>
+                        <Text style={styles.requiredLabel}>Experience level{REQUIRED}</Text>
                         <View style={styles.list}>
-                            {EXPERIENCE.map(exp => (
+                            {EXPERIENCE.map((exp) => (
                                 <TouchableOpacity
                                     key={exp.id}
                                     style={[styles.listCard, experience === exp.id && styles.listCardSelected]}
                                     onPress={() => setExperience(exp.id)}
+                                    activeOpacity={0.8}
                                 >
-                                    <View>
-                                        <Text style={styles.listLabel}>{exp.label}</Text>
-                                        <Text style={styles.listDesc}>{exp.desc}</Text>
-                                    </View>
+                                    <Text style={styles.listLabel}>{exp.label}</Text>
+                                    <Text style={styles.listDesc}>{exp.desc}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
 
-                        <Text style={[styles.inputLabel, { marginTop: spacing.lg }]}>SKIN TYPE</Text>
-                        <View style={styles.flexRow}>
-                            {SKIN_TYPES.map(type => (
+                        <Text style={styles.requiredLabel}>Skin type{REQUIRED}</Text>
+                        <View style={styles.chipRow}>
+                            {SKIN_TYPES.map((type) => (
                                 <TouchableOpacity
                                     key={type.id}
                                     style={[styles.chip, skinType === type.id && styles.chipSelected]}
                                     onPress={() => setSkinType(type.id)}
+                                    activeOpacity={0.8}
                                 >
                                     <Text style={[styles.chipText, skinType === type.id && styles.chipTextSelected]}>{type.label}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
+                        {fieldError && step === 4 ? <Text style={styles.inlineError}>{fieldError}</Text> : null}
                     </View>
                 );
+            default:
+                return null;
         }
     };
 
     return (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-            <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={prevStep} disabled={step === 1} style={{ opacity: step === 1 ? 0 : 1 }}>
-                        <Ionicons name="arrow-back" size={24} color={colors.foreground} />
-                    </TouchableOpacity>
-                    <Text style={styles.stepIndicator}>Step {step} of 4</Text>
-                    <View style={{ width: 24 }} />
-                </View>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.wrapper}>
+            <View style={styles.header}>
+                <TouchableOpacity onPress={prevStep} disabled={step === 1} style={styles.backBtn} activeOpacity={0.7}>
+                    <Ionicons name="arrow-back" size={24} color={step === 1 ? colors.textMuted : colors.foreground} />
+                </TouchableOpacity>
+                <Text style={styles.stepIndicator}>Step {step} of 4</Text>
+                <View style={styles.backBtn} />
+            </View>
 
+                <View style={styles.progressWrap}>
                 <View style={styles.progressBar}>
-                    <View style={[styles.progressIndicator, { width: `${(step / 4) * 100}%` }]} />
+                    <View style={[styles.progressFill, { width: `${(step / 4) * 100}%` }]} />
                 </View>
+            </View>
 
-                <Animated.View style={{ opacity: fadeAnim }}>
-                    {renderStepContent()}
-                </Animated.View>
+            <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.content}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
+                <Animated.View style={{ opacity: fadeAnim }}>{renderStepContent()}</Animated.View>
 
                 <TouchableOpacity
-                    style={[styles.button, { marginTop: spacing.xl }, loading && { opacity: 0.7 }]}
+                    style={[styles.button, loading && styles.buttonDisabled]}
                     onPress={nextStep}
                     disabled={loading}
+                    activeOpacity={0.85}
                 >
-                    <Text style={styles.buttonText}>{loading ? 'Finalizing...' : step === 4 ? 'Complete Profile' : 'Continue'}</Text>
+                    <Text style={styles.buttonText}>{loading ? 'Saving...' : step === 4 ? 'Complete profile' : 'Continue'}</Text>
                 </TouchableOpacity>
             </ScrollView>
         </KeyboardAvoidingView>
@@ -364,97 +451,120 @@ export default function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
-    content: { padding: spacing.lg, paddingTop: 60, paddingBottom: 40 },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-    stepIndicator: { ...typography.label, color: colors.textMuted },
-    progressBar: { height: 4, backgroundColor: colors.card, borderRadius: 2, marginBottom: 40 },
-    progressIndicator: { height: '100%', backgroundColor: colors.foreground, borderRadius: 2 },
-    title: { ...typography.h1, marginBottom: spacing.xs },
-    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
-    unitToggle: {
+    wrapper: { flex: 1, backgroundColor: colors.background },
+    scroll: { flex: 1 },
+    content: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 48 },
+    header: {
         flexDirection: 'row',
-        backgroundColor: colors.card,
-        borderRadius: borderRadius.full,
-        padding: 4,
-        borderWidth: 1,
-        borderColor: colors.borderLight,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: spacing.lg,
+        paddingTop: 56,
+        paddingBottom: spacing.sm,
     },
-    unitBtn: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: borderRadius.full,
-    },
-    unitBtnActive: {
-        backgroundColor: colors.foreground,
-    },
-    unitLabel: {
-        fontSize: 12,
-        fontWeight: '600',
+    backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    stepIndicator: { ...typography.label, color: colors.textMuted, letterSpacing: 0.5 },
+    progressWrap: { paddingHorizontal: spacing.lg, marginBottom: spacing.xl },
+    progressBar: { height: 6, backgroundColor: colors.surface, borderRadius: 3, overflow: 'hidden' },
+    progressFill: { height: '100%', backgroundColor: colors.foreground, borderRadius: 3 },
+    stepBlock: { marginBottom: spacing.xl },
+    title: { ...typography.h1, marginBottom: spacing.xs, fontSize: 26 },
+    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+    subtitle: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.xl, lineHeight: 20 },
+    requiredLabel: {
+        ...typography.label,
         color: colors.textMuted,
+        marginBottom: spacing.sm,
+        marginTop: spacing.lg,
     },
-    unitLabelActive: {
-        color: colors.background,
-    },
-    subtitle: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: 40 },
+    hint: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.sm },
+    inlineError: { fontSize: 13, color: colors.error, marginTop: spacing.sm },
     goalsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     goalCard: {
         width: '31%',
+        minHeight: 88,
         backgroundColor: colors.card,
         borderRadius: borderRadius.lg,
         padding: spacing.md,
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 1,
+        borderWidth: 2,
         borderColor: 'transparent',
         ...shadows.sm,
     },
-    goalCardSelected: { backgroundColor: colors.accentMuted, borderColor: colors.foreground },
+    goalCardSelected: { borderColor: colors.foreground, backgroundColor: colors.accentMuted },
     goalLabel: { ...typography.caption, marginTop: spacing.xs, color: colors.textSecondary, textAlign: 'center' },
     goalLabelSelected: { color: colors.foreground, fontWeight: '600' },
-    inputLabel: { ...typography.label, color: colors.textMuted, marginBottom: spacing.sm, marginTop: spacing.md },
-    row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-    flexRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    unitToggle: {
+        flexDirection: 'row',
+        backgroundColor: colors.surface,
+        borderRadius: borderRadius.full,
+        padding: 4,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    unitBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: borderRadius.full },
+    unitBtnActive: { backgroundColor: colors.foreground },
+    unitLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+    unitLabelActive: { color: colors.buttonText },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     chip: {
-        paddingHorizontal: 20,
-        paddingVertical: 10,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: 12,
         borderRadius: borderRadius.full,
         backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.borderLight,
+        borderWidth: 2,
+        borderColor: colors.border,
     },
     chipSelected: { backgroundColor: colors.foreground, borderColor: colors.foreground },
-    chipText: { ...typography.bodySmall, color: colors.textSecondary },
-    chipTextSelected: { color: colors.background, fontWeight: '600' },
-    inputGroup: { flexDirection: 'row', gap: spacing.md },
-    inputHalf: { flex: 1 },
+    chipText: { ...typography.bodySmall, fontWeight: '500', color: colors.textSecondary },
+    chipTextSelected: { color: colors.buttonText, fontWeight: '600' },
     input: {
         backgroundColor: colors.card,
         borderRadius: borderRadius.md,
-        padding: 16,
-        color: colors.foreground,
+        paddingVertical: 14,
+        paddingHorizontal: spacing.md,
         fontSize: 16,
-        borderWidth: 1,
-        borderColor: colors.borderLight,
+        color: colors.textPrimary,
+        borderWidth: 2,
+        borderColor: colors.border,
     },
+    inputError: { borderColor: colors.error },
+    inputRow: { flexDirection: 'row', gap: spacing.md },
+    inputHalf: { flex: 1 },
     list: { gap: spacing.sm },
     listCard: {
         backgroundColor: colors.card,
         borderRadius: borderRadius.lg,
-        padding: 16,
-        borderWidth: 1,
+        padding: spacing.lg,
+        borderWidth: 2,
         borderColor: 'transparent',
     },
-    listCardSelected: { backgroundColor: colors.accentMuted, borderColor: colors.foreground },
+    listCardSelected: { borderColor: colors.foreground, backgroundColor: colors.accentMuted },
     listLabel: { ...typography.body, fontWeight: '600', color: colors.foreground },
-    listDesc: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+    listDesc: { ...typography.caption, color: colors.textMuted, marginTop: 4 },
+    equipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    equipCard: {
+        width: '31%',
+        minHeight: 80,
+        backgroundColor: colors.card,
+        borderRadius: borderRadius.lg,
+        padding: spacing.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: 'transparent',
+        ...shadows.sm,
+    },
+    caption: { ...typography.caption, color: colors.textMuted, textAlign: 'center', marginTop: 4 },
     button: {
         backgroundColor: colors.foreground,
         borderRadius: borderRadius.full,
         paddingVertical: 18,
         alignItems: 'center',
+        marginTop: spacing.xl,
         ...shadows.md,
     },
-    buttonText: { ...typography.button, color: colors.background },
-    caption: { ...typography.caption, color: colors.textMuted, textAlign: 'center', marginTop: 4 },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { ...typography.button, color: colors.buttonText },
 });

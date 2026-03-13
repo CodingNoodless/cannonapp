@@ -109,6 +109,62 @@ async def send_due_notifications():
         logger.error(f"Scheduler job error: {e}", exc_info=True)
 
 
+async def send_daily_progress_prompts():
+    """
+    Once-per-day WhatsApp prompts asking users for a progress picture.
+
+    Runs periodically (e.g. hourly) and checks, per user, whether we've already
+    sent a prompt for *today* in their local timezone. If not, and it's after
+    21:00 local time, we send one and stamp last_progress_prompt_date.
+    """
+    try:
+        db = get_database()
+        from zoneinfo import ZoneInfo
+
+        now_utc = datetime.utcnow()
+
+        cursor = db.users.find({"phone_number": {"$ne": None}})
+        async for user in cursor:
+            tz_name = user.get("onboarding", {}).get("timezone", "UTC")
+            try:
+                user_tz = ZoneInfo(tz_name)
+            except Exception:
+                user_tz = ZoneInfo("UTC")
+
+            local_now = now_utc.replace(tzinfo=ZoneInfo("UTC")).astimezone(user_tz)
+            today_iso = local_now.date().isoformat()
+            hour = local_now.hour
+
+            # Only after 9pm local time
+            if hour < 21:
+                continue
+
+            last_prompt = user.get("last_progress_prompt_date")
+            if last_prompt == today_iso:
+                continue
+
+            phone = user.get("phone_number")
+            if not phone:
+                continue
+
+            try:
+                success = await twilio_service.send_daily_progress_prompt(
+                    phone=phone,
+                    name=user.get("first_name") or user.get("email"),
+                )
+                if success:
+                    await db.users.update_one(
+                        {"_id": user["_id"]},
+                        {"$set": {"last_progress_prompt_date": today_iso, "updated_at": datetime.utcnow()}},
+                    )
+                    logger.info(f"Sent daily progress prompt to user {user.get('_id')}")
+            except Exception as e:
+                logger.warning(f"Failed to send daily progress prompt to {user.get('_id')}: {e}")
+
+    except Exception as e:
+        logger.error(f"Daily progress prompts job error: {e}", exc_info=True)
+
+
 def start_scheduler(app):
     """
     Start the APScheduler background job.
@@ -125,8 +181,15 @@ def start_scheduler(app):
             id="schedule_notifications",
             replace_existing=True,
         )
+        scheduler.add_job(
+            send_daily_progress_prompts,
+            "interval",
+            minutes=60,
+            id="daily_progress_prompts",
+            replace_existing=True,
+        )
         scheduler.start()
-        logger.info("APScheduler started — checking for due notifications every 5 minutes")
+        logger.info("APScheduler started — checking for due notifications every 5 minutes and daily progress prompts hourly")
         return scheduler
     except ImportError:
         logger.warning("APScheduler not installed — background notifications disabled. Run: pip install apscheduler")

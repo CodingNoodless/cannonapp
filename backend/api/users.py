@@ -2,10 +2,15 @@
 Users API - Profile and Onboarding
 """
 
+import base64
+import logging
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from datetime import datetime
 from bson import ObjectId
 from typing import List, Optional
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from db import get_database
 from middleware import get_current_user
@@ -15,6 +20,11 @@ from models.user import (
 )
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+class ProgressPhotoBase64Body(BaseModel):
+    """Request body for progress photo upload via base64 (avoids multipart issues on RN)."""
+    image_base64: str
 
 
 @router.get("/me", response_model=UserResponse)
@@ -64,6 +74,21 @@ async def save_onboarding(
     )
     
     return {"message": "Onboarding completed", "data": onboarding_data}
+
+
+@router.post("/onboarding/anonymous")
+async def save_onboarding_anonymous(data: OnboardingData):
+    """
+    Public onboarding endpoint used before login/signup.
+
+    This does NOT persist anything by itself. It simply validates and
+    echoes back the onboarding payload so the client can carry it through
+    signup and attach it to the real user account afterwards.
+    """
+    # Ensure completed flag is set on the payload the same way as the authed endpoint
+    onboarding_data = data.model_dump()
+    onboarding_data["completed"] = True
+    return {"message": "Onboarding captured", "data": onboarding_data}
 
 
 @router.post("/me/avatar")
@@ -136,6 +161,108 @@ async def update_profile(
     )
     
     return {"message": "Profile updated"}
+
+
+@router.post("/me/progress-photo")
+async def upload_progress_photo(
+    file: Optional[UploadFile] = File(None, description="Progress image (form field: file)"),
+    image: Optional[UploadFile] = File(None, description="Progress image (form field: image)"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Upload a daily progress picture for the current user.
+
+    Accepts multipart form with either "file" or "image" field.
+    The image is stored via the storage service and a record is persisted
+    in the user_progress_photos collection for archive display in the app.
+    """
+    upload = file or image
+    if not upload:
+        logger.warning("progress-photo: no file or image in request")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing file: send multipart form with 'file' or 'image'",
+        )
+
+    db = get_database()
+
+    content = await upload.read()
+    image_url = await storage_service.upload_image(
+        content,
+        current_user["id"],
+        image_type="progress",
+    )
+    if not image_url:
+        raise HTTPException(status_code=500, detail="Failed to upload progress image")
+
+    doc = {
+        "user_id": current_user["id"],
+        "image_url": image_url,
+        "created_at": datetime.utcnow(),
+    }
+    result = await db.user_progress_photos.insert_one(doc)
+    doc["id"] = str(result.inserted_id)
+    return {"photo": doc}
+
+
+@router.post("/me/progress-photo/base64")
+async def upload_progress_photo_base64(
+    body: ProgressPhotoBase64Body,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Upload a progress picture as base64 (e.g. from React Native ImagePicker with base64: true).
+    """
+    raw = body.image_base64
+    if not raw or not raw.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="image_base64 is required")
+
+    # Strip data URL prefix if present
+    if "," in raw:
+        raw = raw.split(",", 1)[1]
+    try:
+        content = base64.b64decode(raw)
+    except Exception as e:
+        logger.warning("progress-photo/base64: b64decode failed %s", e)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid base64 image")
+
+    if not content:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Empty image")
+
+    db = get_database()
+    image_url = await storage_service.upload_image(
+        content,
+        current_user["id"],
+        image_type="progress",
+    )
+    if not image_url:
+        raise HTTPException(status_code=500, detail="Failed to upload progress image")
+
+    doc = {
+        "user_id": current_user["id"],
+        "image_url": image_url,
+        "created_at": datetime.utcnow(),
+    }
+    result = await db.user_progress_photos.insert_one(doc)
+    doc["id"] = str(result.inserted_id)
+    return {"photo": doc}
+
+
+@router.get("/me/progress-photos")
+async def list_progress_photos(
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    List recent progress photos for the current user (most recent first).
+    """
+    db = get_database()
+    cursor = db.user_progress_photos.find({"user_id": current_user["id"]}).sort("created_at", -1).limit(limit)
+    photos = []
+    async for doc in cursor:
+        doc["id"] = str(doc.pop("_id"))
+        photos.append(doc)
+    return {"photos": photos}
 
 
 @router.put("/account")

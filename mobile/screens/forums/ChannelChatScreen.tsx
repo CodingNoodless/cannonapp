@@ -112,7 +112,7 @@ export default function ChannelChatScreen() {
                             <Text style={styles.avatarInitial}>{getDisplayName(item)[0]?.toUpperCase()}</Text>
                         </View>
                     )}
-                    {!isCurrentUser && !showFullHeader && <View style={{ width: 40 }} />}
+                    {!isCurrentUser && !showFullHeader && <View style={styles.avatarSpacer} />}
                     <View style={[styles.messageContentArea, isCurrentUser ? styles.userContentArea : styles.otherContentArea]}>
                         <View style={[styles.bubble, isCurrentUser ? styles.userBubble : styles.otherBubble, item.is_admin && styles.adminHighlight]}>
                             {showFullHeader && !isCurrentUser && (
@@ -170,23 +170,43 @@ export default function ChannelChatScreen() {
     return (
         <View style={styles.container}>
             <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                <View style={[styles.header, { paddingTop: insets.top + spacing.sm, paddingBottom: spacing.sm }]}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}><Ionicons name="chevron-back" size={22} color={colors.foreground} /></TouchableOpacity>
+                <View style={[styles.header, { paddingTop: insets.top + spacing.sm, paddingBottom: spacing.md }]}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                        <Ionicons name="chevron-back" size={24} color={colors.foreground} />
+                    </TouchableOpacity>
                     {!isSearching ? (
                         <>
-                            <View style={styles.headerLeft}><Text style={styles.channelPrefix}>#</Text><Text style={styles.channelName}>{channelName}</Text></View>
-                            <TouchableOpacity onPress={() => setIsSearching(true)} style={styles.headerAction}><Ionicons name="search" size={20} color={colors.textMuted} /></TouchableOpacity>
+                            <View style={styles.headerCenter}>
+                                <Text style={styles.channelName} numberOfLines={1}>{channelName}</Text>
+                                <Text style={styles.channelHint}>Channel</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setIsSearching(true)} style={styles.headerAction} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                                <Ionicons name="search" size={22} color={colors.textMuted} />
+                            </TouchableOpacity>
                         </>
                     ) : (
                         <View style={styles.searchBar}>
+                            <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
                             <TextInput style={styles.searchInput} placeholder="Search messages..." placeholderTextColor={colors.textMuted} value={searchQuery} onChangeText={setSearchQuery} autoFocus />
                             <TouchableOpacity onPress={() => { setIsSearching(false); setSearchQuery(''); }}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
                         </View>
                     )}
                 </View>
 
-                <FlatList ref={flatListRef} data={messages} renderItem={renderMessage} keyExtractor={(item) => item.id} contentContainerStyle={[styles.messagesList, { paddingBottom: insets.bottom + 20 }]} onContentSizeChange={() => { if (!isSearching) flatListRef.current?.scrollToEnd({ animated: false }); }} showsVerticalScrollIndicator={false}
-                    ListEmptyComponent={<View style={styles.emptyState}>{isSearching ? <Text style={styles.welcomeSubtitle}>No messages found for "{searchQuery}"</Text> : <><Text style={styles.welcomeTitle}>Welcome to #{channelName}</Text><Text style={styles.welcomeSubtitle}>This is the start of the channel.</Text></>}</View>} />
+                <FlatList ref={flatListRef} data={messages} renderItem={renderMessage} keyExtractor={(item) => item.id} contentContainerStyle={[styles.messagesList, { paddingBottom: insets.bottom + 24 }]} style={styles.messagesListContainer} onContentSizeChange={() => { if (!isSearching) flatListRef.current?.scrollToEnd({ animated: false }); }} showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={
+                    <View style={styles.emptyState}>
+                        {isSearching ? (
+                            <Text style={styles.welcomeSubtitle}>No messages found for "{searchQuery}"</Text>
+                        ) : (
+                            <>
+                                <View style={styles.emptyStateIcon}><Ionicons name="chatbubble-ellipses-outline" size={40} color={colors.textMuted} /></View>
+                                <Text style={styles.welcomeTitle}>{channelName}</Text>
+                                <Text style={styles.welcomeSubtitle}>No messages yet. Be the first to say something.</Text>
+                            </>
+                        )}
+                    </View>
+                } />
 
                 {isAdminOnly && !isAdmin && !replyingTo && !isSearching && (
                     <View style={styles.restrictedInfo}><Ionicons name="information-circle" size={18} color={colors.textMuted} /><Text style={styles.restrictedInfoText}>Only admins can post announcements. Reply to comment.</Text></View>
@@ -224,74 +244,77 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     center: { justifyContent: 'center', alignItems: 'center' },
     keyboardView: { flex: 1 },
-    header: { backgroundColor: colors.background, flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
+    header: { backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, ...shadows.sm },
     backButton: { marginRight: spacing.sm },
-    headerLeft: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-    channelPrefix: { color: colors.textMuted, fontSize: 20, fontWeight: '300', marginRight: 4 },
-    channelName: { ...typography.h3 },
+    headerCenter: { flex: 1, minWidth: 0 },
+    channelName: { fontSize: 18, fontWeight: '700', color: colors.foreground },
+    channelHint: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
     headerAction: { padding: spacing.xs },
-    searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-    searchInput: { flex: 1, color: colors.textPrimary, fontSize: 14, backgroundColor: colors.card, borderRadius: borderRadius.sm, paddingHorizontal: spacing.sm, height: 36, marginRight: spacing.sm, ...shadows.sm },
-    cancelText: { color: colors.foreground, fontWeight: '600', fontSize: 14 },
-    messagesList: { paddingHorizontal: spacing.md, paddingTop: spacing.md },
-    messageWrapper: { marginBottom: spacing.md, width: '100%' },
-    userMessageWrapper: { alignItems: 'flex-end' },
+    searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: spacing.sm, height: 40 },
+    searchInput: { flex: 1, color: colors.textPrimary, fontSize: 15, paddingVertical: 8, marginRight: spacing.sm },
+    cancelText: { color: colors.info, fontWeight: '600', fontSize: 15 },
+    messagesListContainer: { backgroundColor: colors.surface },
+    messagesList: { paddingLeft: spacing.md, paddingRight: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.lg },
+    messageWrapper: { marginBottom: spacing.lg, width: '100%' },
+    userMessageWrapper: { alignItems: 'flex-end', paddingRight: 2 },
     otherMessageWrapper: { alignItems: 'flex-start' },
-    compactMessage: { marginBottom: spacing.xs },
-    bubble: { padding: spacing.sm, borderRadius: borderRadius.lg, maxWidth: '85%' },
-    userBubble: { backgroundColor: colors.foreground, borderTopRightRadius: 2, ...shadows.sm },
-    otherBubble: { backgroundColor: colors.card, borderTopLeftRadius: 2, ...shadows.sm },
-    adminHighlight: { borderWidth: 1, borderColor: colors.warning, backgroundColor: 'rgba(255, 159, 10, 0.06)' },
-    replyContext: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-    userReplyContext: { alignSelf: 'flex-end', marginRight: 4 },
-    otherReplyContext: { alignSelf: 'flex-start', marginLeft: 48 },
-    replyLine: { width: 15, height: 10, borderLeftWidth: 2, borderTopWidth: 2, borderColor: colors.border, borderTopLeftRadius: 4, marginRight: 8, marginTop: 4 },
-    replyContextText: { color: colors.textSecondary, fontSize: 12 },
+    compactMessage: { marginBottom: spacing.sm },
+    bubble: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 18, maxWidth: '100%' },
+    userBubble: { backgroundColor: colors.foreground, borderBottomRightRadius: 6, ...shadows.md },
+    otherBubble: { backgroundColor: colors.card, borderBottomLeftRadius: 6, borderWidth: 1, borderColor: colors.border, ...shadows.sm },
+    adminHighlight: { borderWidth: 1.5, borderColor: colors.warning, backgroundColor: 'rgba(255, 159, 10, 0.08)' },
+    replyContext: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, paddingLeft: 10, paddingVertical: 6, paddingRight: 8, backgroundColor: colors.surface, borderRadius: 10, marginHorizontal: 2 },
+    userReplyContext: { alignSelf: 'flex-end', marginRight: 2, marginLeft: 0 },
+    otherReplyContext: { alignSelf: 'flex-start', marginLeft: 44 },
+    replyLine: { width: 3, minHeight: 24, borderRadius: 2, backgroundColor: colors.info, marginRight: 10 },
+    replyContextText: { color: colors.textSecondary, fontSize: 13, flex: 1 },
     replyContextUser: { fontWeight: '600', color: colors.foreground },
     messageHeaderRow: { flexDirection: 'row', width: '100%' },
     userMessageHeaderRow: { flexDirection: 'row-reverse' },
-    avatarMini: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.foreground, justifyContent: 'center', alignItems: 'center', marginRight: spacing.sm },
-    avatarInitial: { color: colors.buttonText, fontWeight: '600', fontSize: 13 },
-    messageContentArea: { flexShrink: 1 },
-    userContentArea: { alignItems: 'flex-end' },
+    avatarMini: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.foreground, justifyContent: 'center', alignItems: 'center', marginRight: spacing.sm },
+    avatarInitial: { color: colors.buttonText, fontWeight: '700', fontSize: 14 },
+    avatarSpacer: { width: 44, marginRight: 0 },
+    messageContentArea: { flexShrink: 1, maxWidth: '100%' },
+    userContentArea: { alignItems: 'flex-end', maxWidth: '85%' },
     otherContentArea: { flex: 1 },
-    nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-    userName: { color: colors.foreground, fontWeight: '600', fontSize: 12 },
+    nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+    userName: { color: colors.foreground, fontWeight: '700', fontSize: 13 },
     adminName: { color: colors.warning },
-    adminTag: { backgroundColor: colors.foreground, paddingHorizontal: 4, borderRadius: 4, marginLeft: 6 },
-    adminTagText: { color: colors.buttonText, fontSize: 9, fontWeight: '700' },
-    timestamp: { color: colors.textMuted, fontSize: 10, marginTop: 4 },
+    adminTag: { backgroundColor: colors.warning, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 6 },
+    adminTagText: { color: colors.background, fontSize: 10, fontWeight: '700' },
+    timestamp: { color: colors.textMuted, fontSize: 11, marginTop: 6 },
     userTimestamp: { alignSelf: 'flex-end', marginRight: 4 },
     otherTimestamp: { alignSelf: 'flex-start', marginLeft: 4 },
-    messageText: { color: colors.foreground, fontSize: 14, lineHeight: 20 },
+    messageText: { color: colors.foreground, fontSize: 15, lineHeight: 22 },
     userMessageText: { color: colors.buttonText },
-    attachmentImage: { width: '100%', aspectRatio: 1.33, borderRadius: borderRadius.md, marginTop: spacing.xs, backgroundColor: colors.surface, maxWidth: 260 },
-    messageActions: { flexDirection: 'row', gap: spacing.sm, marginTop: 4 },
+    attachmentImage: { width: '100%', aspectRatio: 1.33, borderRadius: 12, marginTop: spacing.sm, backgroundColor: colors.surface, maxWidth: 260 },
+    messageActions: { flexDirection: 'row', gap: spacing.sm, marginTop: 6, alignItems: 'center' },
     userMessageActions: { alignSelf: 'flex-end' },
-    otherMessageActions: { paddingLeft: 48 },
-    actionBtn: { padding: 4 },
-    reactionsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6, gap: 4 },
-    reactionBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: colors.borderLight },
+    otherMessageActions: { paddingLeft: 52 },
+    actionBtn: { padding: 6 },
+    reactionsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 6 },
+    reactionBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
     reactionBadgeActive: { backgroundColor: colors.accentMuted, borderColor: colors.foreground },
     reactionEmoji: { fontSize: 13 },
     reactionCount: { fontSize: 11, color: colors.textSecondary, marginLeft: 4 },
     reactionCountActive: { color: colors.foreground, fontWeight: '600' },
     emptyState: { padding: spacing.xxl, alignItems: 'center' },
-    welcomeTitle: { ...typography.h2, textAlign: 'center', marginBottom: spacing.sm },
-    welcomeSubtitle: { fontSize: 13, color: colors.textMuted, textAlign: 'center' },
-    inputWrapper: { paddingHorizontal: spacing.md, paddingTop: spacing.xs, backgroundColor: colors.background },
-    replyPreview: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, padding: spacing.sm, borderTopLeftRadius: borderRadius.md, borderTopRightRadius: borderRadius.md, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
-    replyPreviewText: { color: colors.textSecondary, fontSize: 12 },
+    emptyStateIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.lg },
+    welcomeTitle: { fontSize: 20, fontWeight: '700', color: colors.foreground, textAlign: 'center', marginBottom: spacing.sm },
+    welcomeSubtitle: { fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+    inputWrapper: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.border },
+    replyPreview: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: 12, marginBottom: spacing.sm, borderLeftWidth: 3, borderLeftColor: colors.info },
+    replyPreviewText: { color: colors.textSecondary, fontSize: 13, flex: 1 },
     imagePreviewContainer: { position: 'relative', marginBottom: spacing.sm, alignSelf: 'flex-start' },
-    imagePreview: { width: 80, height: 80, borderRadius: borderRadius.md },
-    removeImageBtn: { position: 'absolute', top: -8, right: -8, backgroundColor: colors.background, borderRadius: 12 },
+    imagePreview: { width: 88, height: 88, borderRadius: 12 },
+    removeImageBtn: { position: 'absolute', top: -6, right: -6, backgroundColor: colors.card, borderRadius: 14, ...shadows.sm },
     uploadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', borderRadius: borderRadius.md },
-    inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: borderRadius.xl, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, ...shadows.sm },
-    attachBtn: { padding: 4 },
-    input: { flex: 1, color: colors.textPrimary, paddingHorizontal: spacing.sm, fontSize: 14, maxHeight: 100, minHeight: 36 },
-    sendBtn: { padding: 8, borderRadius: borderRadius.md },
+    inputContainer: { flexDirection: 'row', alignItems: 'flex-end', backgroundColor: colors.card, borderRadius: 22, paddingHorizontal: spacing.sm, paddingVertical: 6, paddingRight: 4, borderWidth: 1, borderColor: colors.border, ...shadows.sm },
+    attachBtn: { padding: 8, marginRight: 4 },
+    input: { flex: 1, color: colors.textPrimary, paddingHorizontal: spacing.sm, fontSize: 15, maxHeight: 100, minHeight: 38 },
+    sendBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
     sendBtnActive: { backgroundColor: colors.foreground },
-    disabledBtn: { opacity: 0.3 },
-    restrictedInfo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.borderLight, gap: 8 },
-    restrictedInfoText: { color: colors.textMuted, fontSize: 12, fontWeight: '500' },
+    disabledBtn: { opacity: 0.4 },
+    restrictedInfo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, gap: 8 },
+    restrictedInfoText: { color: colors.textMuted, fontSize: 13, fontWeight: '500' },
 });

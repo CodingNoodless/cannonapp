@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -42,8 +42,12 @@ const SKIN_TYPES = [
 
 export default function EditPersonalScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { user, refreshUser } = useAuth();
   const [loading, setLoading] = useState(false);
+
+  /** When true (e.g. from Home "Add More Maxxes"), only show and save goals. Onboarding info is edit-only from Profile. */
+  const onlyGoals = route.params?.onlyGoals === true;
 
   // Initial Unit System
   const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>((user?.onboarding?.unit_system as any) || 'metric');
@@ -143,22 +147,32 @@ export default function EditPersonalScreen() {
     }
 
     // Prepare the data payload
-    const onboardingData: any = {
-      goals: selectedGoals || [],
-      experience_level: experience || 'beginner',
-      equipment: selectedEquipment || [],
-      unit_system: unitSystem,
-      timezone: user?.onboarding?.timezone || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'),
-      completed: true
-    };
+    let onboardingData: any;
 
-    // Only include optional fields if they have values
-    if (gender) onboardingData.gender = gender;
-    if (age && !isNaN(parseInt(age)) && parseInt(age) > 0) onboardingData.age = parseInt(age);
-    if (finalHeight !== undefined && finalHeight > 0) onboardingData.height = Math.round(finalHeight * 10) / 10;
-    if (finalWeight !== undefined && finalWeight > 0) onboardingData.weight = Math.round(finalWeight * 10) / 10;
-    if (activityLevel) onboardingData.activity_level = activityLevel;
-    if (skinType) onboardingData.skin_type = skinType;
+    if (onlyGoals) {
+      // From Home "Add More Maxxes": only update goals, keep existing onboarding otherwise
+      onboardingData = {
+        ...(user?.onboarding || {}),
+        goals: selectedGoals || [],
+        timezone: user?.onboarding?.timezone || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'),
+        completed: true
+      };
+    } else {
+      onboardingData = {
+        goals: selectedGoals || [],
+        experience_level: experience || 'beginner',
+        equipment: selectedEquipment || [],
+        unit_system: unitSystem,
+        timezone: user?.onboarding?.timezone || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'),
+        completed: true
+      };
+      if (gender) onboardingData.gender = gender;
+      if (age && !isNaN(parseInt(age)) && parseInt(age) > 0) onboardingData.age = parseInt(age);
+      if (finalHeight !== undefined && finalHeight > 0) onboardingData.height = Math.round(finalHeight * 10) / 10;
+      if (finalWeight !== undefined && finalWeight > 0) onboardingData.weight = Math.round(finalWeight * 10) / 10;
+      if (activityLevel) onboardingData.activity_level = activityLevel;
+      if (skinType) onboardingData.skin_type = skinType;
+    }
 
     try {
       console.log('Saving onboarding data:', JSON.stringify(onboardingData, null, 2));
@@ -204,7 +218,7 @@ export default function EditPersonalScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Personal Info</Text>
+        <Text style={styles.headerTitle}>{onlyGoals ? 'Your Maxxes' : 'Edit Personal Info'}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -229,6 +243,10 @@ export default function EditPersonalScreen() {
             })}
           </View>
 
+          {onlyGoals ? (
+            <View style={{ height: 80 }} />
+          ) : (
+            <>
           {/* Physical Section */}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Physical Profile</Text>
@@ -326,6 +344,8 @@ export default function EditPersonalScreen() {
               </TouchableOpacity>
             ))}
           </View>
+            </>
+          )}
 
           <View style={{ height: 100 }} />
         </ScrollView>
@@ -333,7 +353,7 @@ export default function EditPersonalScreen() {
 
       <View style={styles.footer}>
         <TouchableOpacity style={[styles.saveBtn, loading && { opacity: 0.7 }]} onPress={handleSave} disabled={loading}>
-          <Text style={styles.saveBtnText}>{loading ? 'Saving...' : 'Save All Changes'}</Text>
+          <Text style={styles.saveBtnText}>{loading ? 'Saving...' : onlyGoals ? 'Save Maxxes' : 'Save All Changes'}</Text>
         </TouchableOpacity>
       </View>
     </View>

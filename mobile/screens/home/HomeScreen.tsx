@@ -128,7 +128,7 @@ export default function HomeScreen() {
                         })}
 
                         {activeMaxxes.length === 0 && (
-                            <TouchableOpacity style={styles.emptyCard} onPress={() => navigation.navigate('EditPersonal')} activeOpacity={0.7}>
+                            <TouchableOpacity style={styles.emptyCard} onPress={() => navigation.navigate('EditPersonal', { onlyGoals: true })} activeOpacity={0.7}>
                                 <Text style={styles.emptyTitle}>No Maxxes active</Text>
                                 <Text style={styles.emptyDesc}>Select a max goal in your profile to begin.</Text>
                                 <View style={styles.emptyButton}>
@@ -138,7 +138,7 @@ export default function HomeScreen() {
                         )}
 
                         {activeMaxxes.length > 0 && (
-                            <TouchableOpacity style={[styles.emptyButton, { marginTop: spacing.md, alignSelf: 'center' }]} onPress={() => navigation.navigate('EditPersonal')} activeOpacity={0.7}>
+                            <TouchableOpacity style={[styles.emptyButton, { marginTop: spacing.md, alignSelf: 'center' }]} onPress={() => navigation.navigate('EditPersonal', { onlyGoals: true })} activeOpacity={0.7}>
                                 <Text style={styles.emptyButtonText}>Add More Maxxes</Text>
                             </TouchableOpacity>
                         )}

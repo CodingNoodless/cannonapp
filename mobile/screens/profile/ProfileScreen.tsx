@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, Alert, ActivityIndicator, Animated, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, Alert, ActivityIndicator, Animated } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,8 +11,6 @@ export default function ProfileScreen() {
     const navigation = useNavigation<any>();
     const { user, logout, refreshUser } = useAuth();
     const [loading, setLoading] = useState(true);
-    const [scans, setScans] = useState<any[]>([]);
-    const [myRank, setMyRank] = useState<any>(null);
     const [progressPhotos, setProgressPhotos] = useState<any[]>([]);
     const [progressModalVisible, setProgressModalVisible] = useState(false);
     const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>(0);
@@ -33,11 +31,6 @@ export default function ProfileScreen() {
 
     const loadData = async () => {
         try {
-            const scanHistory = await api.getScanHistory().catch(() => ({ scans: [] }));
-            setScans(scanHistory.scans || []);
-            const rank = await api.getMyRank().catch(() => null);
-            setMyRank(rank);
-
             const progressRes = await api.getProgressPhotos().catch(() => ({ photos: [] }));
             setProgressPhotos(progressRes.photos || []);
         } catch (e) {
@@ -172,15 +165,13 @@ export default function ProfileScreen() {
         finally { setSaveLoading(false); }
     };
 
-    const safeNumber = (val: any, fallback: string = '-'): string => { const num = parseFloat(val); return isNaN(num) ? fallback : num.toFixed(1); };
-
     const renderSkeleton = () => (
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             <View style={styles.header}>
-                <View style={styles.avatarSkeleton} />
+                <View style={[styles.avatarPlaceholder, styles.avatarSkeleton]} />
                 <View style={styles.textSkeletonRow}>
-                    <View style={styles.textSkeletonLong} />
-                    <View style={styles.textSkeletonShort} />
+                    <View style={styles.skeletonLine} />
+                    <View style={[styles.skeletonLine, { width: '70%' }]} />
                 </View>
                 <View style={styles.textSkeletonBio} />
                 <View style={styles.headerActionsRow}>
@@ -188,40 +179,16 @@ export default function ProfileScreen() {
                     <View style={styles.pillSkeleton} />
                 </View>
             </View>
-
-            <View style={styles.statsCard}>
-                <View style={styles.statItem}>
-                    <View style={styles.statSkeleton} />
-                    <Text style={styles.statLabel}>Level</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                    <View style={styles.statSkeleton} />
-                    <Text style={styles.statLabel}>Rank</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                    <View style={styles.statSkeleton} />
-                    <Text style={styles.statLabel}>Scans</Text>
-                </View>
-            </View>
-
-            <View style={styles.sectionContainer}>
-                <Text style={styles.sectionLabel}>PROGRESS ARCHIVE</Text>
+            <View style={styles.section}>
+                <View style={[styles.skeletonLine, { width: 80, height: 18, marginBottom: 12 }]} />
                 <View style={styles.archiveSkeletonRow}>
                     <View style={styles.archiveSkeletonItem} />
                     <View style={styles.archiveSkeletonItem} />
                     <View style={styles.archiveSkeletonItem} />
                 </View>
             </View>
-
-            <View style={styles.sectionContainer}>
-                <Text style={styles.sectionLabel}>ACCOUNT SETTINGS</Text>
-                <View style={styles.settingsList}>
-                    <View style={styles.settingsSkeletonItem} />
-                    <View style={styles.settingsSkeletonItem} />
-                    <View style={styles.settingsSkeletonItem} />
-                </View>
+            <View style={styles.section}>
+                <View style={[styles.skeletonLine, { height: 52, borderRadius: 12 }]} />
             </View>
         </ScrollView>
     );
@@ -239,18 +206,18 @@ export default function ProfileScreen() {
             {loading ? (
                 renderSkeleton()
             ) : (
-                <Animated.ScrollView showsVerticalScrollIndicator={false} style={{ opacity: fadeAnim }}>
+                <Animated.ScrollView showsVerticalScrollIndicator={false} style={{ opacity: fadeAnim }} contentContainerStyle={styles.scrollContent}>
                     <View style={styles.header}>
-                        <TouchableOpacity onPress={handleEditPress} style={styles.avatarContainer}>
+                        <TouchableOpacity onPress={handleEditPress} style={styles.avatarContainer} activeOpacity={0.8}>
                             {user?.profile?.avatar_url ? (
                                 <Image source={{ uri: user.profile.avatar_url }} style={styles.avatarImage} />
                             ) : (
                                 <View style={styles.avatarPlaceholder}><Ionicons name="person" size={40} color={colors.textMuted} /></View>
                             )}
                         </TouchableOpacity>
-                        <Text style={styles.email}>{user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : user?.email}</Text>
-                        {user?.username && <Text style={styles.username}>@{user.username}</Text>}
-                        {user?.profile?.bio ? <Text style={styles.bio}>{user.profile.bio}</Text> : null}
+                        <Text style={styles.headerName}>{user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : user?.email}</Text>
+                        {user?.username && <Text style={styles.headerUsername}>@{user.username}</Text>}
+                        {user?.profile?.bio ? <Text style={styles.headerBio}>{user.profile.bio}</Text> : null}
                         <View style={styles.headerActionsRow}>
                             <TouchableOpacity style={styles.editPill} onPress={handleEditPress} activeOpacity={0.7}>
                                 <Text style={styles.editPillText}>Edit Profile</Text>
@@ -269,65 +236,49 @@ export default function ProfileScreen() {
                         </View>
                     </View>
 
-                    <View style={styles.statsCard}>
-                        <View style={styles.statItem}><Text style={styles.statValue}>{safeNumber(user?.profile?.current_level)}</Text><Text style={styles.statLabel}>Level</Text></View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}><Text style={styles.statValue}>{myRank?.rank !== null ? `#${myRank?.rank}` : '-'}</Text><Text style={styles.statLabel}>Rank</Text></View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}><Text style={styles.statValue}>{scans.length}</Text><Text style={styles.statLabel}>Scans</Text></View>
-                    </View>
-
-                    <View style={styles.sectionContainer}>
-                        <Text style={styles.sectionLabel}>PROGRESS ARCHIVE</Text>
+                    {/* Progress archive - grid like IG */}
+                    <View style={styles.section}>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Progress</Text>
+                        </View>
                         {progressPhotos.length === 0 ? (
-                            <View style={styles.archiveEmptyCard}>
-                                <Text style={styles.emptyText}>
-                                    No progress pictures yet. Add one to start your private archive.
-                                </Text>
-                            </View>
+                            <TouchableOpacity style={styles.archiveEmpty} onPress={uploadProgressImage} activeOpacity={0.8}>
+                                <View style={styles.archiveEmptyIcon}>
+                                    <Ionicons name="images-outline" size={40} color={colors.textMuted} />
+                                </View>
+                                <Text style={styles.archiveEmptyTitle}>No photos yet</Text>
+                                <Text style={styles.archiveEmptySub}>Add progress photos to your private archive</Text>
+                            </TouchableOpacity>
                         ) : (
-                            <FlatList
-                                data={progressPhotos}
-                                keyExtractor={(item) => item.id}
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={styles.archiveList}
-                                renderItem={({ item, index }) => (
+                            <View style={styles.archiveGrid}>
+                                {progressPhotos.map((item, index) => (
                                     <TouchableOpacity
-                                        style={styles.archiveItem}
+                                        key={item.id}
+                                        style={styles.archiveGridItem}
                                         onPress={() => openProgressArchiveAt(index)}
-                                        activeOpacity={0.8}
+                                        activeOpacity={0.9}
                                     >
-                                        <Image source={{ uri: api.resolveAttachmentUrl(item.image_url) }} style={styles.archiveImage} />
-                                        <Text style={styles.archiveDate} numberOfLines={1}>
-                                            {new Date(item.created_at).toLocaleDateString()}
-                                        </Text>
+                                        <Image source={{ uri: api.resolveAttachmentUrl(item.image_url) }} style={styles.archiveGridImage} />
                                     </TouchableOpacity>
-                                )}
-                            />
+                                ))}
+                            </View>
                         )}
                     </View>
 
-                    <View style={styles.sectionContainer}>
-                        <Text style={styles.sectionLabel}>ACCOUNT SETTINGS</Text>
-                        <View style={styles.settingsList}>
-                            <TouchableOpacity
-                                style={styles.settingsItem}
-                                onPress={() => navigation.navigate('EditPersonal')}
-                                activeOpacity={0.7}
-                            >
-                            <Ionicons name="person-outline" size={18} color={colors.textSecondary} />
-                            <View style={styles.settingsInfo}><Text style={styles.settingsText}>Edit My Personal Info</Text></View>
-                            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                    {/* Settings - minimal list */}
+                    <View style={styles.section}>
+                        <TouchableOpacity style={styles.menuRow} onPress={() => navigation.navigate('EditPersonal')} activeOpacity={0.7}>
+                            <Ionicons name="person-outline" size={22} color={colors.foreground} />
+                            <Text style={styles.menuRowText}>Edit personal info</Text>
+                            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                     </View>
-                </View>
 
-                <TouchableOpacity style={styles.logoutButton} onPress={logout} activeOpacity={0.7}>
-                    <Text style={styles.logoutText}>Sign Out</Text>
-                </TouchableOpacity>
-                <View style={{ height: spacing.xxl }} />
-            </Animated.ScrollView>
+                    <TouchableOpacity style={styles.logoutButton} onPress={logout} activeOpacity={0.7}>
+                        <Text style={styles.logoutText}>Sign out</Text>
+                    </TouchableOpacity>
+                    <View style={{ height: 40 }} />
+                </Animated.ScrollView>
             )}
 
             <Modal animationType="fade" transparent visible={editModalVisible} onRequestClose={() => setEditModalVisible(false)}>
@@ -395,45 +346,46 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
+    scrollContent: { paddingBottom: spacing.xxl },
     topBar: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingTop: 56, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingTop: 56,
+        paddingHorizontal: spacing.lg,
+        paddingBottom: spacing.sm,
     },
-    backButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', ...shadows.sm },
+    backButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: colors.card,
+        alignItems: 'center',
+        justifyContent: 'center',
+        ...shadows.sm,
+    },
     topBarTitle: { fontSize: 15, fontWeight: '600', color: colors.foreground },
-    header: { alignItems: 'center', paddingTop: spacing.lg, paddingBottom: spacing.xl },
+    header: {
+        alignItems: 'center',
+        paddingTop: spacing.lg,
+        paddingBottom: spacing.xl,
+    },
     avatarContainer: { position: 'relative' },
     avatarImage: { width: 88, height: 88, borderRadius: 44, ...shadows.md },
-    avatarPlaceholder: { width: 88, height: 88, borderRadius: 44, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', ...shadows.sm },
-    avatarSkeleton: {
+    avatarPlaceholder: {
         width: 88,
         height: 88,
         borderRadius: 44,
-        backgroundColor: colors.surfaceLight,
-        marginBottom: spacing.md,
-    },
-    email: { fontSize: 15, fontWeight: '600', color: colors.foreground, marginTop: spacing.md },
-    username: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
-    bio: { fontSize: 13, color: colors.textSecondary, marginTop: 4, textAlign: 'center', paddingHorizontal: spacing.xxl },
-    textSkeletonRow: {
-        width: '60%',
+        backgroundColor: colors.surface,
+        justifyContent: 'center',
         alignItems: 'center',
-        gap: spacing.xs,
-        marginTop: spacing.sm,
-        marginBottom: spacing.sm,
+        ...shadows.sm,
     },
-    textSkeletonLong: {
-        height: 14,
-        borderRadius: 999,
-        backgroundColor: colors.surfaceLight,
-        width: '100%',
-    },
-    textSkeletonShort: {
-        height: 12,
-        borderRadius: 999,
-        backgroundColor: colors.surfaceLight,
-        width: '70%',
-    },
+    avatarSkeleton: { backgroundColor: colors.surfaceLight },
+    headerName: { fontSize: 15, fontWeight: '600', color: colors.foreground, marginTop: spacing.md },
+    headerUsername: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+    headerBio: { fontSize: 13, color: colors.textSecondary, marginTop: 4, textAlign: 'center', paddingHorizontal: spacing.xxl },
+    textSkeletonRow: { width: '60%', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm, marginBottom: spacing.sm },
     textSkeletonBio: {
         height: 32,
         borderRadius: borderRadius.md,
@@ -449,10 +401,7 @@ const styles = StyleSheet.create({
         marginTop: spacing.md,
     },
     editPill: { paddingHorizontal: spacing.lg, paddingVertical: 8, borderRadius: borderRadius.full, backgroundColor: colors.card, ...shadows.sm },
-    progressPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
+    progressPill: { flexDirection: 'row', alignItems: 'center' },
     editPillText: { fontSize: 12, fontWeight: '500', color: colors.textSecondary },
     pillSkeleton: {
         flex: 1,
@@ -460,83 +409,103 @@ const styles = StyleSheet.create({
         borderRadius: borderRadius.full,
         backgroundColor: colors.surfaceLight,
     },
-    statsCard: {
-        flexDirection: 'row', marginHorizontal: spacing.lg,
-        backgroundColor: colors.card, borderRadius: borderRadius['2xl'],
-        padding: spacing.lg, ...shadows.md,
+    section: {
+        paddingHorizontal: spacing.lg,
+        marginTop: spacing.xl,
     },
-    statItem: { flex: 1, alignItems: 'center' },
-    statValue: { fontSize: 24, fontWeight: '600', color: colors.foreground },
-    statLabel: { ...typography.caption, marginTop: 4 },
-    statDivider: { width: 1, backgroundColor: colors.borderLight },
-    statSkeleton: {
-        width: 40,
-        height: 20,
-        borderRadius: borderRadius.full,
-        backgroundColor: colors.surfaceLight,
-        marginBottom: spacing.xs,
+    sectionHeader: { marginBottom: spacing.md },
+    sectionTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: colors.foreground,
     },
-    sectionContainer: { paddingHorizontal: spacing.lg, marginTop: spacing.xl },
-    sectionLabel: { ...typography.label, marginBottom: spacing.md },
-    scanList: {
-        backgroundColor: colors.card, borderRadius: borderRadius['2xl'],
-        padding: spacing.md, ...shadows.sm,
-    },
-    scanItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
-    scanInfo: { flex: 1, marginLeft: spacing.md },
-    scanDate: { fontSize: 13, color: colors.textSecondary },
-    scanScore: { fontSize: 16, fontWeight: '600', color: colors.foreground, marginRight: spacing.sm },
-    emptyText: { fontSize: 13, color: colors.textMuted, textAlign: 'center', padding: spacing.lg },
-    archiveSkeletonRow: {
-        flexDirection: 'row',
-        gap: spacing.md,
-        marginTop: spacing.md,
-    },
-    archiveSkeletonItem: {
-        width: 88,
-        height: 112,
-        borderRadius: borderRadius.lg,
-        backgroundColor: colors.surfaceLight,
-    },
-    logoutButton: { alignItems: 'center', marginTop: spacing.xl, padding: spacing.md },
-    logoutText: { fontSize: 14, fontWeight: '500', color: colors.error },
-    archiveEmptyCard: {
+    archiveEmpty: {
         backgroundColor: colors.card,
-        borderRadius: borderRadius['2xl'],
-        paddingVertical: spacing.lg,
-        paddingHorizontal: spacing.md,
-        ...shadows.sm,
-    },
-    archiveList: {
-        paddingVertical: spacing.sm,
-    },
-    archiveItem: {
+        borderRadius: 16,
+        paddingVertical: spacing.xxl,
+        paddingHorizontal: spacing.lg,
         alignItems: 'center',
-        marginRight: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderStyle: 'dashed',
     },
-    archiveImage: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
+    archiveEmptyIcon: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: colors.surface,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: spacing.md,
+    },
+    archiveEmptyTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: colors.foreground,
+        marginBottom: 4,
+    },
+    archiveEmptySub: {
+        fontSize: 13,
+        color: colors.textMuted,
+    },
+    archiveGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginHorizontal: -2,
+    },
+    archiveGridItem: {
+        width: '33.33%',
+        padding: 2,
+        aspectRatio: 1,
+    },
+    archiveGridImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 4,
         backgroundColor: colors.surface,
     },
-    archiveDate: {
-        marginTop: 4,
-        fontSize: 11,
-        color: colors.textSecondary,
+    archiveSkeletonRow: {
+        flexDirection: 'row',
+        gap: 4,
     },
-    settingsList: {
-        backgroundColor: colors.card, borderRadius: borderRadius['2xl'],
-        padding: spacing.md, ...shadows.sm,
-    },
-    settingsItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md },
-    settingsInfo: { flex: 1, marginLeft: spacing.md },
-    settingsText: { fontSize: 14, color: colors.foreground, fontWeight: '500' },
-    settingsSkeletonItem: {
-        height: 40,
-        borderRadius: borderRadius.md,
+    archiveSkeletonItem: {
+        flex: 1,
+        aspectRatio: 1,
+        borderRadius: 4,
         backgroundColor: colors.surfaceLight,
-        marginBottom: spacing.sm,
+    },
+    skeletonLine: {
+        height: 14,
+        borderRadius: 7,
+        backgroundColor: colors.surfaceLight,
+        width: '100%',
+    },
+    menuRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.card,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+        gap: spacing.md,
+    },
+    menuRowText: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: '500',
+        color: colors.foreground,
+    },
+    logoutButton: {
+        alignItems: 'center',
+        marginTop: spacing.xl,
+        paddingVertical: spacing.md,
+    },
+    logoutText: {
+        fontSize: 15,
+        fontWeight: '500',
+        color: colors.textMuted,
     },
     modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: spacing.lg },
     modalContent: {

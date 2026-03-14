@@ -9,18 +9,6 @@ import { colors, spacing, borderRadius, typography, shadows } from '../../theme/
 
 const PLANS = [
     {
-        id: 'premium',
-        name: 'Premium',
-        price: 29,
-        stripeUrl: 'https://buy.stripe.com/dRmdR9gYn72Me7X9DSbII00',
-        features: [
-            'Full course library access',
-            'AI schedule + reminders',
-            'Community, forums & leaderboard',
-            'Priority support',
-        ],
-    },
-    {
         id: 'basic',
         name: 'Basic',
         price: 20,
@@ -30,6 +18,18 @@ const PLANS = [
             'Basic progress tracking',
             'Standard community access',
             'Standard support',
+        ],
+    },
+    {
+        id: 'premium',
+        name: 'Premium',
+        price: 29,
+        stripeUrl: 'https://buy.stripe.com/dRmdR9gYn72Me7X9DSbII00',
+        features: [
+            'Full course library access',
+            'AI schedule + reminders',
+            'Community & forums',
+            'Priority support',
         ],
     },
 ];

@@ -106,33 +106,49 @@ export default function ChannelChatScreen() {
                         {isCurrentUser && <View style={[styles.replyLine, { borderLeftWidth: 0, borderRightWidth: 2, marginRight: 0, marginLeft: 8, borderTopRightRadius: 4, borderTopLeftRadius: 0 }]} />}
                     </View>
                 )}
-                <View style={[styles.messageHeaderRow, isCurrentUser && styles.userMessageHeaderRow]}>
-                    {!isCurrentUser && showFullHeader && (
-                        <View style={styles.avatarMini}>
-                            <Text style={styles.avatarInitial}>{getDisplayName(item)[0]?.toUpperCase()}</Text>
-                        </View>
-                    )}
-                    {!isCurrentUser && !showFullHeader && <View style={styles.avatarSpacer} />}
-                    <View style={[styles.messageContentArea, isCurrentUser ? styles.userContentArea : styles.otherContentArea]}>
-                        <View style={[styles.bubble, isCurrentUser ? styles.userBubble : styles.otherBubble, item.is_admin && styles.adminHighlight]}>
-                            {showFullHeader && !isCurrentUser && (
-                                <View style={styles.nameRow}>
-                                    <Text style={[styles.userName, item.is_admin && styles.adminName]}>
-                                        {getDisplayName(item)}
-                                    </Text>
-                                    {item.is_admin && (
-                                        <View style={styles.adminTag}>
-                                            <Text style={styles.adminTagText}>ADMIN</Text>
-                                        </View>
-                                    )}
+                <View style={styles.messageHeaderRow}>
+                    {isCurrentUser ? (
+                        <>
+                            <View style={styles.userMessageSpacer} />
+                            <View style={styles.userMessageContent}>
+                                <View style={[styles.bubble, styles.userBubble, item.is_admin && styles.adminHighlight]}>
+                                    {item.content ? <Text style={[styles.messageText, styles.userMessageText]}>{item.content}</Text> : null}
+                                    {item.attachment_url && item.attachment_type === 'image' && <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />}
+                                </View>
+                                <Text style={[styles.timestamp, styles.userTimestamp]}>{formatTime(item.created_at)}</Text>
+                                {renderReactions(item)}
+                            </View>
+                        </>
+                    ) : (
+                        <>
+                            {showFullHeader && (
+                                <View style={styles.avatarMini}>
+                                    <Text style={styles.avatarInitial}>{getDisplayName(item)[0]?.toUpperCase()}</Text>
                                 </View>
                             )}
-                            {item.content ? <Text style={[styles.messageText, isCurrentUser && styles.userMessageText]}>{item.content}</Text> : null}
-                            {item.attachment_url && item.attachment_type === 'image' && <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />}
-                        </View>
-                        <Text style={[styles.timestamp, isCurrentUser ? styles.userTimestamp : styles.otherTimestamp]}>{formatTime(item.created_at)}</Text>
-                        {renderReactions(item)}
-                    </View>
+                            {!showFullHeader && <View style={styles.avatarSpacer} />}
+                            <View style={[styles.messageContentArea, styles.otherContentArea]}>
+                                <View style={[styles.bubble, styles.otherBubble, item.is_admin && styles.adminHighlight]}>
+                                    {showFullHeader && (
+                                        <View style={styles.nameRow}>
+                                            <Text style={[styles.userName, item.is_admin && styles.adminName]}>
+                                                {getDisplayName(item)}
+                                            </Text>
+                                            {item.is_admin && (
+                                                <View style={styles.adminTag}>
+                                                    <Text style={styles.adminTagText}>ADMIN</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    )}
+                                    {item.content ? <Text style={styles.messageText}>{item.content}</Text> : null}
+                                    {item.attachment_url && item.attachment_type === 'image' && <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />}
+                                </View>
+                                <Text style={[styles.timestamp, styles.otherTimestamp]}>{formatTime(item.created_at)}</Text>
+                                {renderReactions(item)}
+                            </View>
+                        </>
+                    )}
                 </View>
                 <View style={[styles.messageActions, isCurrentUser ? styles.userMessageActions : styles.otherMessageActions]}>
                     <TouchableOpacity onPress={() => setReplyingTo(item)} style={styles.actionBtn}><Ionicons name="arrow-undo" size={14} color={colors.textMuted} /></TouchableOpacity>
@@ -269,13 +285,13 @@ const styles = StyleSheet.create({
     replyLine: { width: 3, minHeight: 24, borderRadius: 2, backgroundColor: colors.info, marginRight: 10 },
     replyContextText: { color: colors.textSecondary, fontSize: 13, flex: 1 },
     replyContextUser: { fontWeight: '600', color: colors.foreground },
-    messageHeaderRow: { flexDirection: 'row', width: '100%' },
-    userMessageHeaderRow: { flexDirection: 'row-reverse' },
+    messageHeaderRow: { flexDirection: 'row', width: '100%', alignItems: 'flex-end' },
+    userMessageSpacer: { flex: 1, minWidth: 0 },
+    userMessageContent: { flexShrink: 0, maxWidth: '80%', alignItems: 'flex-end' },
     avatarMini: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.foreground, justifyContent: 'center', alignItems: 'center', marginRight: spacing.sm },
     avatarInitial: { color: colors.buttonText, fontWeight: '700', fontSize: 14 },
     avatarSpacer: { width: 44, marginRight: 0 },
     messageContentArea: { flexShrink: 1, maxWidth: '100%' },
-    userContentArea: { alignItems: 'flex-end', maxWidth: '85%' },
     otherContentArea: { flex: 1 },
     nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
     userName: { color: colors.foreground, fontWeight: '700', fontSize: 13 },

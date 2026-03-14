@@ -48,23 +48,46 @@ export default function CannonChatScreen() {
     };
 
     const renderMessage = ({ item }: { item: Message }) => (
-        <View style={[styles.messageBubble, item.role === 'user' ? styles.userBubble : styles.assistantBubble]}>
-            {item.content ? <Text style={[styles.messageText, item.role === 'user' && styles.userMessageText]}>{item.content}</Text> : null}
-            {item.attachment_url && item.attachment_type === 'image' && (
-                <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />
-            )}
+        <View style={[styles.messageRow, item.role === 'user' && styles.userMessageRow]}>
+            <View style={[styles.bubble, item.role === 'user' ? styles.userBubble : styles.assistantBubble]}>
+                {item.content ? <Text style={[styles.messageText, item.role === 'user' && styles.userMessageText]}>{item.content}</Text> : null}
+                {item.attachment_url && item.attachment_type === 'image' && (
+                    <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />
+                )}
+            </View>
+        </View>
+    );
+
+    const ListEmpty = () => (
+        <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Start a conversation</Text>
+            <Text style={styles.emptySubtitle}>Ask Max about lookmaxxing, routines, or anything else.</Text>
         </View>
     );
 
     return (
         <View style={styles.container}>
+            {/* Faint chat icon watermark in center background */}
+            <View style={styles.watermarkWrap} pointerEvents="none">
+                <Ionicons name="chatbubbles" size={140} color={colors.textMuted} style={styles.watermarkIcon} />
+            </View>
+
             <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
                 <View style={styles.header}>
                     <Text style={styles.title}>Max</Text>
                     <Text style={styles.subtitle}>Your lookmaxxing coach</Text>
                 </View>
 
-                <FlatList ref={flatListRef} data={messages} renderItem={renderMessage} keyExtractor={(_, i) => i.toString()} contentContainerStyle={styles.messageList} onContentSizeChange={() => flatListRef.current?.scrollToEnd()} showsVerticalScrollIndicator={false} />
+                <FlatList
+                    ref={flatListRef}
+                    data={messages}
+                    renderItem={renderMessage}
+                    keyExtractor={(_, i) => i.toString()}
+                    contentContainerStyle={[styles.messageList, messages.length === 0 && styles.messageListEmpty]}
+                    onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={ListEmpty}
+                />
 
                 <View style={styles.outerInputContainer}>
                     {selectedImage && (
@@ -78,10 +101,22 @@ export default function CannonChatScreen() {
                     )}
                     <View style={styles.inputContainer}>
                         <TouchableOpacity style={styles.attachButton} onPress={handlePickImage} disabled={loading || uploading}>
-                            <Ionicons name="add" size={22} color={colors.textMuted} />
+                            <Ionicons name="add-circle-outline" size={26} color={colors.textMuted} />
                         </TouchableOpacity>
-                        <TextInput style={styles.input} placeholder="Ask Max anything..." placeholderTextColor={colors.textMuted} value={input} onChangeText={setInput} multiline editable={!loading && !uploading} />
-                        <TouchableOpacity style={[styles.sendButton, (!input.trim() && !selectedImage) && styles.disabledButton]} onPress={sendMessage} disabled={(!input.trim() && !selectedImage) || loading || uploading}>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Ask Max anything..."
+                            placeholderTextColor={colors.textMuted}
+                            value={input}
+                            onChangeText={setInput}
+                            multiline
+                            editable={!loading && !uploading}
+                        />
+                        <TouchableOpacity
+                            style={[styles.sendButton, (!input.trim() && !selectedImage) && styles.disabledButton]}
+                            onPress={sendMessage}
+                            disabled={(!input.trim() && !selectedImage) || loading || uploading}
+                        >
                             {loading || uploading ? <ActivityIndicator size="small" color={colors.buttonText} /> : <Ionicons name="send" size={18} color={colors.buttonText} />}
                         </TouchableOpacity>
                     </View>
@@ -94,24 +129,76 @@ export default function CannonChatScreen() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     keyboardView: { flex: 1 },
-    header: { paddingTop: 64, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
-    title: { ...typography.h2 },
-    subtitle: { ...typography.caption, marginTop: 2 },
-    messageList: { padding: spacing.lg },
-    messageBubble: { maxWidth: '80%', padding: spacing.md, borderRadius: borderRadius.lg, marginBottom: spacing.sm },
-    userBubble: { alignSelf: 'flex-end', backgroundColor: colors.foreground, ...shadows.sm },
-    assistantBubble: { alignSelf: 'flex-start', backgroundColor: colors.card, ...shadows.sm },
-    messageText: { ...typography.body },
+    watermarkWrap: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    watermarkIcon: {
+        opacity: 0.07,
+    },
+    header: {
+        paddingTop: 64,
+        paddingHorizontal: spacing.lg,
+        paddingBottom: spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+        backgroundColor: colors.card,
+    },
+    title: { fontSize: 26, fontWeight: '700', color: colors.foreground, letterSpacing: -0.5 },
+    subtitle: { fontSize: 14, color: colors.textMuted, marginTop: 4 },
+    messageList: { padding: spacing.lg, paddingBottom: spacing.xl },
+    messageListEmpty: { flexGrow: 1 },
+    messageRow: { flexDirection: 'row', marginBottom: spacing.md, paddingHorizontal: 4 },
+    userMessageRow: { justifyContent: 'flex-end' },
+    bubble: {
+        maxWidth: '82%',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 18,
+        ...shadows.sm,
+    },
+    userBubble: {
+        backgroundColor: colors.foreground,
+        borderBottomRightRadius: 6,
+        ...shadows.md,
+    },
+    assistantBubble: {
+        backgroundColor: colors.card,
+        borderBottomLeftRadius: 6,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    messageText: { fontSize: 15, lineHeight: 22, color: colors.foreground },
     userMessageText: { color: colors.buttonText },
-    attachmentImage: { width: 220, height: 160, borderRadius: borderRadius.md, marginTop: spacing.sm },
-    outerInputContainer: { padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.borderLight },
-    imagePreviewContainer: { position: 'relative', marginBottom: spacing.sm, marginLeft: spacing.md },
-    imagePreview: { width: 72, height: 72, borderRadius: borderRadius.md },
-    removeImageBtn: { position: 'absolute', top: -8, right: -8, backgroundColor: colors.background, borderRadius: 12 },
-    uploadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', borderRadius: borderRadius.md },
-    inputContainer: { flexDirection: 'row', alignItems: 'flex-end' },
-    attachButton: { padding: spacing.sm, marginBottom: 4 },
-    input: { flex: 1, backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, color: colors.textPrimary, maxHeight: 100, ...shadows.sm },
-    sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.foreground, justifyContent: 'center', alignItems: 'center', marginLeft: spacing.sm, ...shadows.sm },
-    disabledButton: { opacity: 0.3 },
+    attachmentImage: { width: 220, height: 160, borderRadius: 12, marginTop: spacing.sm },
+    emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+    emptyTitle: { fontSize: 18, fontWeight: '600', color: colors.foreground, marginBottom: 8 },
+    emptySubtitle: { fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+    outerInputContainer: {
+        padding: spacing.md,
+        paddingBottom: spacing.lg,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        backgroundColor: colors.background,
+    },
+    imagePreviewContainer: { position: 'relative', marginBottom: spacing.sm, alignSelf: 'flex-start' },
+    imagePreview: { width: 80, height: 80, borderRadius: 12 },
+    removeImageBtn: { position: 'absolute', top: -6, right: -6, backgroundColor: colors.card, borderRadius: 14, ...shadows.sm },
+    uploadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', borderRadius: 12 },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        backgroundColor: colors.card,
+        borderRadius: 24,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderWidth: 1,
+        borderColor: colors.border,
+        ...shadows.sm,
+    },
+    attachButton: { padding: 6, marginRight: 4 },
+    input: { flex: 1, color: colors.textPrimary, fontSize: 15, paddingVertical: 10, paddingHorizontal: 8, maxHeight: 100 },
+    sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.foreground, justifyContent: 'center', alignItems: 'center', marginLeft: 8, ...shadows.sm },
+    disabledButton: { opacity: 0.35 },
 });

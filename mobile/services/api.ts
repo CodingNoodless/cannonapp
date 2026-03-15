@@ -338,6 +338,11 @@ class ApiService {
         return response.data;
     }
 
+    async createForum(data: { name: string; description: string; category?: string; tags?: string[]; is_admin_only?: boolean }) {
+        const response = await this.client.post('forums', data);
+        return response.data;
+    }
+
     async getChannelMessages(channelId: string, limit: number = 50, query?: string) {
         const response = await this.client.get(`forums/${channelId}/messages`, { params: { limit, query } });
         return response.data;
@@ -345,7 +350,10 @@ class ApiService {
 
     async uploadChatFile(formData: FormData) {
         const response = await this.client.post('forums/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
+            transformRequest: [(data: unknown, headers?: Record<string, string>) => {
+                if (headers) delete headers['Content-Type'];
+                return data;
+            }],
         });
         return response.data;
     }

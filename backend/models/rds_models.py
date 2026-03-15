@@ -73,6 +73,8 @@ class Forum(Base):
     slug = Column(String, nullable=False, unique=True)
     description = Column(Text)
     icon = Column(Text)
+    category = Column(String)
+    tags = Column(JSON, default=list)
     order = Column(Integer, default=0)
     is_admin_only = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)

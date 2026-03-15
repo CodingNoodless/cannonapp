@@ -8,11 +8,13 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from db import get_db, get_rds_db
-from middleware.auth_middleware import require_paid_user, get_current_admin_user
+from middleware.auth_middleware import require_paid_user
 from models.forum import ChannelCreate, MessageCreate
 from services.storage_service import storage_service
 from models.rds_models import Forum, ChannelMessage
 from models.sqlalchemy_models import User
+import re
+import random
 
 router = APIRouter(prefix="/forums", tags=["Channels"])
 
@@ -64,6 +66,8 @@ async def list_channels(
             "slug": ch.slug,
             "description": ch.description,
             "icon": ch.icon,
+            "category": ch.category,
+            "tags": ch.tags or [],
             "is_admin_only": ch.is_admin_only,
             "message_count": message_count
         })
@@ -123,6 +127,7 @@ async def get_messages(
             "channel_id": channel_id,
             "user_id": str(msg.user_id),
             "user_email": user.email.split("@")[0] if user else "Unknown",
+            "user_avatar_url": (user.profile or {}).get("avatar_url") if user else None,
             "content": msg.content,
             "attachment_url": msg.attachment_url,
             "attachment_type": msg.attachment_type,
@@ -132,7 +137,14 @@ async def get_messages(
             "reactions": msg.reactions or {}
         })
 
-    return {"messages": payload, "channel_name": channel.name, "is_admin_only": channel.is_admin_only}
+    return {
+        "messages": payload,
+        "channel_name": channel.name,
+        "channel_description": channel.description,
+        "channel_category": channel.category,
+        "channel_tags": channel.tags or [],
+        "is_admin_only": channel.is_admin_only
+    }
 
 
 @router.post("/{channel_id}/messages")
@@ -180,6 +192,7 @@ async def send_message(
             "channel_id": channel_id,
             "user_id": current_user["id"],
             "user_email": user.email.split("@")[0] if user else "Unknown",
+            "user_avatar_url": (user.profile or {}).get("avatar_url") if user else None,
             "content": data.content,
             "attachment_url": data.attachment_url,
             "attachment_type": data.attachment_type,
@@ -230,15 +243,28 @@ async def toggle_reaction(
 @router.post("")
 async def create_channel(
     data: ChannelCreate,
-    admin: dict = Depends(get_current_admin_user),
+    current_user: dict = Depends(require_paid_user),
     rds_db: AsyncSession = Depends(get_rds_db),
 ):
-    """Create channel (admin only)"""
+    """Create channel (community allowed, official admin only)"""
+    if data.is_admin_only and not current_user.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Only admins can create official forums")
+
+    slug = data.slug
+    if not slug:
+        base = re.sub(r"[^a-z0-9]+", "-", data.name.strip().lower()).strip("-")
+        slug = base or f"forum-{random.randint(1000,9999)}"
+    existing = await rds_db.execute(select(Forum).where(Forum.slug == slug))
+    if existing.scalar_one_or_none():
+        slug = f"{slug}-{random.randint(1000,9999)}"
+
     channel = Forum(
         name=data.name,
-        slug=data.slug,
+        slug=slug,
         description=data.description,
         icon=data.icon,
+        category=data.category,
+        tags=data.tags or [],
         order=data.order or 0,
         is_admin_only=data.is_admin_only,
         created_at=datetime.utcnow()

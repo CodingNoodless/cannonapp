@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image, NativeSyntheticEvent, TextInputKeyPressEventData } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ interface Message {
     user_id: string;
     user_email: string;
     username?: string;
+    user_avatar_url?: string;
     content: string;
     attachment_url?: string;
     attachment_type?: string;
@@ -39,6 +40,10 @@ export default function ChannelChatScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+    const [highlightedId, setHighlightedId] = useState<string | null>(null);
+    const [channelDescription, setChannelDescription] = useState<string | null>(null);
+    const [channelCategory, setChannelCategory] = useState<string | null>(null);
+    const [channelTags, setChannelTags] = useState<string[]>([]);
     const flatListRef = useRef<FlatList>(null);
     const isAdmin = user?.is_admin || false;
     const currentUserId = user?.id;
@@ -51,7 +56,14 @@ export default function ChannelChatScreen() {
     }, [channelId, searchQuery, isSearching]));
 
     const loadMessages = async () => {
-        try { const data = await api.getChannelMessages(channelId, 50, searchQuery); setMessages(data.messages || []); if (data.is_admin_only !== undefined) setIsAdminOnly(data.is_admin_only); }
+        try {
+            const data = await api.getChannelMessages(channelId, 50, searchQuery);
+            setMessages(data.messages || []);
+            if (data.is_admin_only !== undefined) setIsAdminOnly(data.is_admin_only);
+            if (data.channel_description !== undefined) setChannelDescription(data.channel_description);
+            if (data.channel_category !== undefined) setChannelCategory(data.channel_category);
+            if (data.channel_tags !== undefined) setChannelTags(data.channel_tags || []);
+        }
         catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
@@ -63,8 +75,16 @@ export default function ChannelChatScreen() {
         setSending(true); let attachmentUrl = undefined; let attachmentType = undefined;
         try {
             if (selectedImage) {
-                setUploading(true); const formData = new FormData(); const filename = selectedImage.split('/').pop() || 'upload.jpg'; const match = /\.(\w+)$/.exec(filename);
-                formData.append('file', { uri: selectedImage, name: filename, type: match ? `image/${match[1]}` : 'image' } as any);
+                setUploading(true);
+                const formData = new FormData();
+                if (Platform.OS === 'web') {
+                    const blob = await fetch(selectedImage).then((res) => res.blob());
+                    formData.append('file', blob, 'upload.jpg');
+                } else {
+                    const filename = selectedImage.split('/').pop() || 'upload.jpg';
+                    const match = /\.(\w+)$/.exec(filename);
+                    formData.append('file', { uri: selectedImage, name: filename, type: match ? `image/${match[1]}` : 'image' } as any);
+                }
                 const uploadRes = await api.uploadChatFile(formData); attachmentUrl = uploadRes.url; attachmentType = 'image'; setUploading(false);
             }
             const result = await api.sendChannelMessage(channelId, messageText.trim() || '', replyingTo?.id, attachmentUrl, attachmentType);
@@ -72,6 +92,18 @@ export default function ChannelChatScreen() {
             setMessageText(''); setReplyingTo(null); setSelectedImage(null);
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         } catch (e) { console.error(e); } finally { setSending(false); setUploading(false); }
+    };
+
+    const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+        if (Platform.OS !== 'web') return;
+        // @ts-ignore - web event has shiftKey
+        const shiftKey = (e as any)?.nativeEvent?.shiftKey;
+        if (e.nativeEvent.key === 'Enter' && !shiftKey) {
+            e.preventDefault?.();
+            if (messageText.trim() || selectedImage) {
+                handleSendMessage();
+            }
+        }
     };
 
     const handleToggleReaction = async (messageId: string, emoji: string) => {
@@ -86,73 +118,70 @@ export default function ChannelChatScreen() {
         return message.user_email.split('@')[0];
     };
 
+    const scrollToMessage = (messageId: string) => {
+        const index = messages.findIndex((m) => m.id === messageId);
+        if (index === -1) return;
+        setHighlightedId(messageId);
+        flatListRef.current?.scrollToIndex({ index, animated: true });
+        setTimeout(() => setHighlightedId(null), 1800);
+    };
+
     const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-        const prevMessage = index > 0 ? messages[index - 1] : null;
-        const isSameUser = prevMessage && prevMessage.user_id === item.user_id;
-        const isCurrentUser = item.user_id === currentUserId;
-        const timeDiff = prevMessage ? (new Date(item.created_at).getTime() - new Date(prevMessage.created_at).getTime()) / 60000 : 999;
-        const showFullHeader = !isSameUser || timeDiff > 5 || item.parent_id;
+        const showFullHeader = true;
         const repliedMessage = item.parent_id ? messages.find(m => m.id === item.parent_id) : null;
+        const isHighlighted = highlightedId === item.id;
+        const isReply = !!item.parent_id;
 
         return (
-            <View style={[styles.messageWrapper, isCurrentUser ? styles.userMessageWrapper : styles.otherMessageWrapper, !showFullHeader && styles.compactMessage]}>
-                {repliedMessage && (
-                    <View style={[styles.replyContext, isCurrentUser ? styles.userReplyContext : styles.otherReplyContext]}>
-                        {!isCurrentUser && <View style={styles.replyLine} />}
-                        <Text style={styles.replyContextText} numberOfLines={1}>
-                            <Text style={styles.replyContextUser}>{getDisplayName(repliedMessage)}: </Text>
-                            {repliedMessage.content}
-                        </Text>
-                        {isCurrentUser && <View style={[styles.replyLine, { borderLeftWidth: 0, borderRightWidth: 2, marginRight: 0, marginLeft: 8, borderTopRightRadius: 4, borderTopLeftRadius: 0 }]} />}
+            <View style={[styles.messageRow, isReply && styles.replyRow, isHighlighted && styles.messageHighlight]}>
+                <View style={styles.userPanel}>
+                    <View style={styles.userAvatarWrap}>
+                        {item.user_avatar_url ? (
+                            <Image source={{ uri: api.resolveAttachmentUrl(item.user_avatar_url) }} style={styles.userAvatar} />
+                        ) : (
+                            <View style={styles.avatarMini}>
+                                <Text style={styles.avatarInitial}>{getDisplayName(item)[0]?.toUpperCase()}</Text>
+                            </View>
+                        )}
                     </View>
-                )}
-                <View style={styles.messageHeaderRow}>
-                    {isCurrentUser ? (
-                        <>
-                            <View style={styles.userMessageSpacer} />
-                            <View style={styles.userMessageContent}>
-                                <View style={[styles.bubble, styles.userBubble, item.is_admin && styles.adminHighlight]}>
-                                    {item.content ? <Text style={[styles.messageText, styles.userMessageText]}>{item.content}</Text> : null}
-                                    {item.attachment_url && item.attachment_type === 'image' && <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />}
-                                </View>
-                                <Text style={[styles.timestamp, styles.userTimestamp]}>{formatTime(item.created_at)}</Text>
-                                {renderReactions(item)}
-                            </View>
-                        </>
-                    ) : (
-                        <>
-                            {showFullHeader && (
-                                <View style={styles.avatarMini}>
-                                    <Text style={styles.avatarInitial}>{getDisplayName(item)[0]?.toUpperCase()}</Text>
-                                </View>
-                            )}
-                            {!showFullHeader && <View style={styles.avatarSpacer} />}
-                            <View style={[styles.messageContentArea, styles.otherContentArea]}>
-                                <View style={[styles.bubble, styles.otherBubble, item.is_admin && styles.adminHighlight]}>
-                                    {showFullHeader && (
-                                        <View style={styles.nameRow}>
-                                            <Text style={[styles.userName, item.is_admin && styles.adminName]}>
-                                                {getDisplayName(item)}
-                                            </Text>
-                                            {item.is_admin && (
-                                                <View style={styles.adminTag}>
-                                                    <Text style={styles.adminTagText}>ADMIN</Text>
-                                                </View>
-                                            )}
-                                        </View>
-                                    )}
-                                    {item.content ? <Text style={styles.messageText}>{item.content}</Text> : null}
-                                    {item.attachment_url && item.attachment_type === 'image' && <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />}
-                                </View>
-                                <Text style={[styles.timestamp, styles.otherTimestamp]}>{formatTime(item.created_at)}</Text>
-                                {renderReactions(item)}
-                            </View>
-                        </>
-                    )}
+                    <Text style={styles.userPanelName} numberOfLines={1}>{getDisplayName(item)}</Text>
+                    <Text style={styles.userPanelRole}>{item.is_admin ? 'Admin' : 'Member'}</Text>
                 </View>
-                <View style={[styles.messageActions, isCurrentUser ? styles.userMessageActions : styles.otherMessageActions]}>
-                    <TouchableOpacity onPress={() => setReplyingTo(item)} style={styles.actionBtn}><Ionicons name="arrow-undo" size={14} color={colors.textMuted} /></TouchableOpacity>
-                    {!isCurrentUser && <TouchableOpacity onPress={() => handleToggleReaction(item.id, '\uD83D\uDD25')} style={styles.actionBtn}><Ionicons name="flash" size={14} color={colors.textMuted} /></TouchableOpacity>}
+                <View style={styles.contentColumn}>
+                    <View style={styles.metaRow}>
+                        <Text style={styles.postIndex}>#{index + 1}</Text>
+                        <Text style={styles.metaTime}>{new Date(item.created_at).toLocaleString()}</Text>
+                    </View>
+                    {repliedMessage && (
+                        <TouchableOpacity
+                            style={styles.replyContext}
+                            onPress={() => scrollToMessage(repliedMessage.id)}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.replyContextText} numberOfLines={1}>
+                                <Text style={styles.replyContextUser}>{getDisplayName(repliedMessage)}: </Text>
+                                {repliedMessage.content}
+                            </Text>
+                            <Ionicons name="arrow-up" size={14} color={colors.textMuted} />
+                        </TouchableOpacity>
+                    )}
+                    <View style={styles.messageBody}>
+                        {item.content ? <Text style={styles.messageText}>{item.content}</Text> : null}
+                        {item.attachment_url && item.attachment_type === 'image' && (
+                            <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />
+                        )}
+                    </View>
+                    {renderReactions(item)}
+                    <View style={styles.messageActions}>
+                        <TouchableOpacity onPress={() => setReplyingTo(item)} style={styles.actionBtn}>
+                            <Ionicons name="arrow-undo" size={14} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        {item.user_id !== currentUserId && (
+                            <TouchableOpacity onPress={() => handleToggleReaction(item.id, '\uD83D\uDD25')} style={styles.actionBtn}>
+                                <Ionicons name="flash" size={14} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        )}
+                    </View>
                 </View>
             </View>
         );
@@ -181,7 +210,7 @@ export default function ChannelChatScreen() {
         ? `Replying to ${getDisplayName(replyingTo)}`
         : isAdminOnly && !isAdmin
         ? 'Only admins can start announcements'
-        : `Message #${channelName}`;
+        : `Message #${channelName} (press Enter to send)`;
 
     return (
         <View style={styles.container}>
@@ -209,7 +238,23 @@ export default function ChannelChatScreen() {
                     )}
                 </View>
 
-                <FlatList ref={flatListRef} data={messages} renderItem={renderMessage} keyExtractor={(item) => item.id} contentContainerStyle={[styles.messagesList, { paddingBottom: insets.bottom + 24 }]} style={styles.messagesListContainer} onContentSizeChange={() => { if (!isSearching) flatListRef.current?.scrollToEnd({ animated: false }); }} showsVerticalScrollIndicator={false}
+                <FlatList ref={flatListRef} data={messages} renderItem={renderMessage} keyExtractor={(item) => item.id} contentContainerStyle={[styles.messagesList, { paddingBottom: insets.bottom + 24 }]} style={styles.messagesListContainer} onContentSizeChange={() => { if (!isSearching) flatListRef.current?.scrollToEnd({ animated: false }); }} onScrollToIndexFailed={(info) => { setTimeout(() => { flatListRef.current?.scrollToIndex({ index: info.index, animated: true }); }, 250); }} showsVerticalScrollIndicator={false}
+                    ListHeaderComponent={
+                        !isSearching ? (
+                            <View style={styles.threadHeader}>
+                                <Text style={styles.breadcrumb}>Community · {channelCategory || 'general'}</Text>
+                                <Text style={styles.threadTitle}>{channelName}</Text>
+                                {!!channelDescription && <Text style={styles.threadSubtitle}>{channelDescription}</Text>}
+                                {!!channelTags.length && (
+                                    <View style={styles.tagRow}>
+                                        {channelTags.slice(0, 5).map((tag) => (
+                                            <View key={tag} style={styles.tagPill}><Text style={styles.tagText}>{tag}</Text></View>
+                                        ))}
+                                    </View>
+                                )}
+                            </View>
+                        ) : null
+                    }
                     ListEmptyComponent={
                     <View style={styles.emptyState}>
                         {isSearching ? (
@@ -244,7 +289,18 @@ export default function ChannelChatScreen() {
                         {selectedImage && <View style={styles.imagePreviewContainer}><Image source={{ uri: selectedImage }} style={styles.imagePreview} /><TouchableOpacity style={styles.removeImageBtn} onPress={() => setSelectedImage(null)}><Ionicons name="close-circle" size={22} color={colors.error} /></TouchableOpacity>{uploading && <View style={styles.uploadOverlay}><ActivityIndicator color={colors.buttonText} /></View>}</View>}
                         <View style={styles.inputContainer}>
                             <TouchableOpacity style={styles.attachBtn} onPress={handlePickImage} disabled={uploading}><Ionicons name="add-circle" size={24} color={colors.textMuted} /></TouchableOpacity>
-                            <TextInput style={styles.input} placeholder={placeholderText} placeholderTextColor={colors.textMuted} value={messageText} onChangeText={setMessageText} multiline editable={(canPostTopLevel || !!replyingTo) && !uploading} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder={placeholderText}
+                                placeholderTextColor={colors.textMuted}
+                                value={messageText}
+                                onChangeText={setMessageText}
+                                multiline
+                                editable={(canPostTopLevel || !!replyingTo) && !uploading}
+                                onKeyPress={handleKeyPress}
+                                returnKeyType="send"
+                                autoFocus={Platform.OS === 'web'}
+                            />
                             <TouchableOpacity style={[styles.sendBtn, (messageText.trim() || selectedImage) && (canPostTopLevel || !!replyingTo) && styles.sendBtnActive, (!messageText.trim() && !selectedImage || (!canPostTopLevel && !replyingTo)) && styles.disabledBtn]} onPress={handleSendMessage} disabled={(!messageText.trim() && !selectedImage) || sending || uploading || (!canPostTopLevel && !replyingTo)}>
                                 {uploading || sending ? <ActivityIndicator size="small" color={colors.buttonText} /> : <Ionicons name="send" size={18} color={(messageText.trim() || selectedImage) && (canPostTopLevel || !!replyingTo) ? colors.buttonText : colors.textMuted} />}
                             </TouchableOpacity>
@@ -270,43 +326,59 @@ const styles = StyleSheet.create({
     searchInput: { flex: 1, color: colors.textPrimary, fontSize: 15, paddingVertical: 8, marginRight: spacing.sm },
     cancelText: { color: colors.info, fontWeight: '600', fontSize: 15 },
     messagesListContainer: { backgroundColor: colors.surface },
-    messagesList: { paddingLeft: spacing.md, paddingRight: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.lg },
-    messageWrapper: { marginBottom: spacing.lg, width: '100%' },
-    userMessageWrapper: { alignItems: 'flex-end', paddingRight: 2 },
-    otherMessageWrapper: { alignItems: 'flex-start' },
-    compactMessage: { marginBottom: spacing.sm },
-    bubble: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 18, maxWidth: '100%' },
-    userBubble: { backgroundColor: colors.foreground, borderBottomRightRadius: 6, ...shadows.md },
-    otherBubble: { backgroundColor: colors.card, borderBottomLeftRadius: 6, borderWidth: 1, borderColor: colors.border, ...shadows.sm },
-    adminHighlight: { borderWidth: 1.5, borderColor: colors.warning, backgroundColor: 'rgba(255, 159, 10, 0.08)' },
-    replyContext: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, paddingLeft: 10, paddingVertical: 6, paddingRight: 8, backgroundColor: colors.surface, borderRadius: 10, marginHorizontal: 2 },
-    userReplyContext: { alignSelf: 'flex-end', marginRight: 2, marginLeft: 0 },
-    otherReplyContext: { alignSelf: 'flex-start', marginLeft: 44 },
-    replyLine: { width: 3, minHeight: 24, borderRadius: 2, backgroundColor: colors.info, marginRight: 10 },
+    messagesList: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.lg },
+    messageRow: {
+        flexDirection: 'row',
+        backgroundColor: colors.card,
+        borderRadius: 12,
+        marginBottom: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.border,
+        ...shadows.sm,
+    },
+    replyRow: {
+        borderLeftWidth: 3,
+        borderLeftColor: colors.info,
+    },
+    messageHighlight: { borderColor: colors.info },
+    userPanel: {
+        width: 120,
+        padding: spacing.md,
+        borderRightWidth: 1,
+        borderRightColor: colors.border,
+        alignItems: 'center',
+        backgroundColor: colors.surface,
+        borderTopLeftRadius: 12,
+        borderBottomLeftRadius: 12,
+    },
+    userAvatarWrap: { marginBottom: spacing.sm },
+    userAvatar: { width: 56, height: 56, borderRadius: 28 },
+    avatarMini: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.foreground, justifyContent: 'center', alignItems: 'center' },
+    avatarInitial: { color: colors.buttonText, fontWeight: '700', fontSize: 16 },
+    userPanelName: { fontSize: 13, fontWeight: '700', color: colors.foreground, textAlign: 'center' },
+    userPanelRole: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
+    contentColumn: { flex: 1, minWidth: 0, padding: spacing.md },
+    metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+    postIndex: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
+    metaTime: { fontSize: 11, color: colors.textMuted },
+    replyContext: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        backgroundColor: colors.surface,
+        borderRadius: 8,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 6,
+        marginBottom: 8,
+        borderLeftWidth: 3,
+        borderLeftColor: colors.info,
+    },
     replyContextText: { color: colors.textSecondary, fontSize: 13, flex: 1 },
     replyContextUser: { fontWeight: '600', color: colors.foreground },
-    messageHeaderRow: { flexDirection: 'row', width: '100%', alignItems: 'flex-end' },
-    userMessageSpacer: { flex: 1, minWidth: 0 },
-    userMessageContent: { flexShrink: 0, maxWidth: '80%', alignItems: 'flex-end' },
-    avatarMini: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.foreground, justifyContent: 'center', alignItems: 'center', marginRight: spacing.sm },
-    avatarInitial: { color: colors.buttonText, fontWeight: '700', fontSize: 14 },
-    avatarSpacer: { width: 44, marginRight: 0 },
-    messageContentArea: { flexShrink: 1, maxWidth: '100%' },
-    otherContentArea: { flex: 1 },
-    nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-    userName: { color: colors.foreground, fontWeight: '700', fontSize: 13 },
-    adminName: { color: colors.warning },
-    adminTag: { backgroundColor: colors.warning, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 6 },
-    adminTagText: { color: colors.background, fontSize: 10, fontWeight: '700' },
-    timestamp: { color: colors.textMuted, fontSize: 11, marginTop: 6 },
-    userTimestamp: { alignSelf: 'flex-end', marginRight: 4 },
-    otherTimestamp: { alignSelf: 'flex-start', marginLeft: 4 },
+    messageBody: { backgroundColor: colors.background, borderRadius: 8, padding: spacing.md },
     messageText: { color: colors.foreground, fontSize: 15, lineHeight: 22 },
-    userMessageText: { color: colors.buttonText },
     attachmentImage: { width: '100%', aspectRatio: 1.33, borderRadius: 12, marginTop: spacing.sm, backgroundColor: colors.surface, maxWidth: 260 },
-    messageActions: { flexDirection: 'row', gap: spacing.sm, marginTop: 6, alignItems: 'center' },
-    userMessageActions: { alignSelf: 'flex-end' },
-    otherMessageActions: { paddingLeft: 52 },
+    messageActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, alignItems: 'center' },
     actionBtn: { padding: 6 },
     reactionsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 6 },
     reactionBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
@@ -318,6 +390,13 @@ const styles = StyleSheet.create({
     emptyStateIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.lg },
     welcomeTitle: { fontSize: 20, fontWeight: '700', color: colors.foreground, textAlign: 'center', marginBottom: spacing.sm },
     welcomeSubtitle: { fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+    threadHeader: { backgroundColor: colors.card, padding: spacing.lg, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.lg },
+    breadcrumb: { fontSize: 11, color: colors.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' },
+    threadTitle: { fontSize: 20, fontWeight: '700', color: colors.foreground, marginTop: 6 },
+    threadSubtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 6, lineHeight: 18 },
+    tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+    tagPill: { backgroundColor: colors.surface, borderRadius: borderRadius.full, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: colors.border },
+    tagText: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
     inputWrapper: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.border },
     replyPreview: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: 12, marginBottom: spacing.sm, borderLeftWidth: 3, borderLeftColor: colors.info },
     replyPreviewText: { color: colors.textSecondary, fontSize: 13, flex: 1 },

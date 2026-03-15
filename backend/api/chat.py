@@ -72,6 +72,39 @@ async def _handle_skinmax_flow(message: str, user: User) -> tuple[str | None, bo
             user.schedule_preferences = prefs
             updated = True
             return "Got it. You’re up. I’ll adjust today’s reminders.", updated
+        # Intent: change wake/sleep time
+        if "wake" in msg_lower and ("change" in msg_lower or "set" in msg_lower or "update" in msg_lower):
+            new_time = parse_time_from_text(msg, default_meridian="am")
+            if not new_time:
+                return "What time should I set your wake time to?", False
+            skin["wake_time"] = new_time
+            prefs["skinmax"] = skin
+            user.schedule_preferences = prefs
+            updated = True
+            return f"Updated your wake time to {new_time}.", updated
+        if "sleep" in msg_lower or "bed" in msg_lower or "bedtime" in msg_lower:
+            if "change" in msg_lower or "set" in msg_lower or "update" in msg_lower:
+                new_time = parse_time_from_text(msg, default_meridian="pm")
+                if not new_time:
+                    return "What time should I set your bedtime to?", False
+                skin["sleep_time"] = new_time
+                prefs["skinmax"] = skin
+                user.schedule_preferences = prefs
+                updated = True
+                return f"Updated your bedtime to {new_time}.", updated
+        # Intent: show current reminders
+        if "reminder" in msg_lower or "schedule" in msg_lower or "set to" in msg_lower:
+            concern_key = skin.get("concern", "acne")
+            return _skinmax_summary(concern_key, skin.get("wake_time", "07:00"), skin.get("sleep_time", "23:00")), False
+        # Intent: change concern
+        if "concern" in msg_lower or "switch" in msg_lower or "change" in msg_lower:
+            concern_key = get_concern_key(msg_lower)
+            if concern_key:
+                skin["concern"] = concern_key
+                prefs["skinmax"] = skin
+                user.schedule_preferences = prefs
+                updated = True
+                return _skinmax_summary(concern_key, skin.get("wake_time", "07:00"), skin.get("sleep_time", "23:00")), updated
         return None, False
 
     step = skin.get("setup_step")
@@ -106,6 +139,9 @@ async def _handle_skinmax_flow(message: str, user: User) -> tuple[str | None, bo
         return _skinmax_prompt_for_concern(), updated
 
     if step == "awaiting_concern":
+        # If user gave multiple options, ask to pick one
+        if any(sep in msg_lower for sep in [" and ", ",", "/"]):
+            return "Pick the single most important concern for now. Reply with one number (1-5).", False
         concern_key = get_concern_key(msg_lower)
         if not concern_key:
             return _skinmax_prompt_for_concern(), False

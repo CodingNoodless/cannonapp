@@ -3,11 +3,13 @@ Cannon App - FastAPI Backend
 Main application entry point
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import os
+import traceback
 
 from config import settings
 from db import init_db, close_db, init_rds_db, close_rds_db
@@ -54,6 +56,23 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch unhandled exceptions and return JSON with CORS headers."""
+    origin = request.headers.get("origin", "*")
+    if settings.debug:
+        traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc) if settings.debug else "Internal server error"},
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        },
+    )
+
 
 # Include routers
 app.include_router(auth_router, prefix="/api")

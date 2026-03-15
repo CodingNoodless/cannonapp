@@ -98,7 +98,7 @@ class ApiService {
 
     async uploadAvatar(imageUri: string) {
         const formData = new FormData();
-        // @ts-ignore
+        // @ts-ignore - React Native FormData accepts { uri, name, type }
         formData.append('file', {
             uri: imageUri,
             name: 'avatar.jpg',
@@ -106,7 +106,10 @@ class ApiService {
         });
 
         const response = await this.client.post('users/me/avatar', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
+            transformRequest: [(data: unknown, headers?: Record<string, string>) => {
+                if (headers) delete headers['Content-Type'];
+                return data;
+            }],
         });
         return response.data;
     }
@@ -119,7 +122,12 @@ class ApiService {
             name: 'progress.jpg',
             type: 'image/jpeg',
         });
-        const response = await this.client.post('users/me/progress-photo', formData);
+        const response = await this.client.post('users/me/progress-photo', formData, {
+            transformRequest: [(data: unknown, headers?: Record<string, string>) => {
+                if (headers) delete headers['Content-Type'];
+                return data;
+            }],
+        });
         return response.data;
     }
 

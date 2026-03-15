@@ -98,21 +98,29 @@ async def test_activate_subscription(
     This bypasses Stripe webhooks which don't work on localhost.
     """
     from config import settings
-    if settings.app_env != "development":
+    env = (settings.app_env or "").lower()
+    if env not in ("development", "dev") and not getattr(settings, "debug", False):
         raise HTTPException(status_code=403, detail="Only available in development mode")
     
     user_id = current_user["id"]
     
-    # Activate user
-    user = await db.get(User, UUID(user_id))
-    if user:
+    try:
+        user = await db.get(User, UUID(user_id))
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
         user.is_paid = True
         user.subscription_status = "active"
         await db.commit()
 
-    scans_result = await db.execute(select(Scan).where(Scan.user_id == UUID(user_id)))
-    for scan in scans_result.scalars().all():
-        scan.is_unlocked = True
-    await db.commit()
+        scans_result = await db.execute(select(Scan).where(Scan.user_id == UUID(user_id)))
+        for scan in scans_result.scalars().all():
+            scan.is_unlocked = True
+        await db.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        print(f"[ERROR] test-activate failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Activation failed: {e}")
     
     return {"status": "activated", "message": "Subscription activated for testing"}

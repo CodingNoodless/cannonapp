@@ -61,7 +61,10 @@ export default function PaymentScreen() {
             await refreshUser();
             navigation.navigate('PaymentThankYou');
         } catch (error: any) {
-            Alert.alert('Error', error?.response?.data?.detail || 'Failed to activate dev subscription.');
+            const msg = error?.response?.data?.detail
+                || error?.message
+                || (error?.response?.status === 401 ? 'Please log in first.' : 'Failed to activate dev subscription.');
+            Alert.alert('Error', String(msg));
         } finally {
             setDevLoading(false);
         }

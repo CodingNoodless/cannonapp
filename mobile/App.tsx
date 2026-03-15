@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -32,11 +32,15 @@ export default function App() {
         );
     }
 
+    const webContainerStyle = Platform.OS === 'web' ? { maxWidth: 1200, width: '100%', alignSelf: 'center' as const, paddingTop: 24 } : {};
+
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
-            <AuthProvider>
-                <AppNavigator />
-            </AuthProvider>
+            <View style={[{ flex: 1 }, webContainerStyle]}>
+                <AuthProvider>
+                    <AppNavigator />
+                </AuthProvider>
+            </View>
         </GestureHandlerRootView>
     );
 }

@@ -54,10 +54,22 @@ export default function HomeScreen() {
         hairmax: ['Wash routine', 'Topicals & meds', 'Microneedling plan'],
     };
 
+    // Map goal IDs to possible course categories (RDS may use different names)
+    const GOAL_TO_CATEGORIES: Record<string, string[]> = {
+        bonemax: ['bonemax', 'mewing', 'jawline', 'posture'],
+        fitmax: ['fitmax', 'fat_loss'],
+        heightmax: ['heightmax'],
+        skinmax: ['skinmax', 'skincare'],
+        hairmax: ['hairmax', 'hair'],
+    };
+
     // Map each goal to its corresponding course and find progress if any
     const activeMaxxes = selectedGoals.map(goalId => {
-        // Find course matching the goal ID directly or by mapping (course category = goal string)
-        const course = courses.find(c => c.category?.toLowerCase() === goalId.toLowerCase() || c.id === goalId);
+        const categories = GOAL_TO_CATEGORIES[goalId?.toLowerCase()] || [goalId?.toLowerCase()];
+        const course = courses.find(c => {
+            const cat = (c.category || '').toLowerCase();
+            return categories.includes(cat) || c.id === goalId;
+        });
         if (!course) return null;
         const prog = progress.find(p => p.course_id === course.id);
         return { course, progress: prog, goalId };

@@ -43,13 +43,16 @@ export function RootNavigator() {
         );
     }
 
+    const onboardingCompleted = user?.onboarding?.completed === true;
     const initialRoute = !isAuthenticated
         ? 'Landing'
         : user?.is_admin
             ? 'Admin'
-            : !isPaid
-                ? 'Payment'
-                : 'Main';
+            : !onboardingCompleted
+                ? 'Onboarding'
+                : !isPaid
+                    ? 'Payment'
+                    : 'Main';
 
     return (
         <Stack.Navigator
@@ -58,12 +61,23 @@ export function RootNavigator() {
             initialRouteName={initialRoute}
         >
             {!isAuthenticated ? (
-                // Pre-auth flow: landing -> onboarding -> auth
+                // Pre-auth: landing -> sign in (login/signup)
                 <>
                     <Stack.Screen name="Landing" component={LandingScreen} />
-                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     <Stack.Screen name="Login" component={LoginScreen} />
                     <Stack.Screen name="Signup" component={SignupScreen} />
+                </>
+            ) : !onboardingCompleted ? (
+                // Post-auth: onboarding (goals, profile, face scan) -> payment -> main
+                <>
+                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+                    <Stack.Screen name="FeaturesIntro" component={FeaturesIntroScreen} />
+                    <Stack.Screen name="FaceScan" component={FaceScanScreen} />
+                    <Stack.Screen name="BlurredResult" component={BlurredResultScreen} />
+                    <Stack.Screen name="FullResult" component={FullResultScreen} />
+                    <Stack.Screen name="ScanDetail" component={ScanDetailScreen} />
+                    <Stack.Screen name="Payment" component={PaymentScreen} />
+                    <Stack.Screen name="PaymentThankYou" component={PaymentThankYouScreen} options={{ headerShown: false }} />
                 </>
             ) : user?.is_admin ? (
                 // Admin Portal

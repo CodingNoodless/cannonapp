@@ -130,7 +130,7 @@ async def upload_avatar(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Assign a new dict to ensure SQLAlchemy tracks JSON changes
-    current_profile = user.profile or {}
+    current_profile = dict(user.profile or {})
     current_profile["avatar_url"] = avatar_url
     user.profile = current_profile
     user.updated_at = datetime.utcnow()
@@ -154,7 +154,7 @@ async def update_profile(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Merge with existing profile data to avoid overwriting unrelated fields
-    current_profile = user.profile or {}
+    current_profile = dict(user.profile or {})
     updated_data = profile.model_dump(exclude_unset=True)
     
     for key, value in updated_data.items():

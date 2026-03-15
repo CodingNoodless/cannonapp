@@ -4,6 +4,7 @@ Chat API - Cannon LLM Chat
 
 from fastapi import APIRouter, Depends
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -11,10 +12,114 @@ from db import get_db
 from middleware.auth_middleware import require_paid_user
 from services.gemini_service import gemini_service
 from services.storage_service import storage_service
+from services.skinmax import SKINMAX_CONCERNS, parse_time_from_text, get_concern_key
 from models.leaderboard import ChatRequest, ChatResponse
-from models.sqlalchemy_models import ChatHistory, Scan
+from models.sqlalchemy_models import ChatHistory, Scan, User
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
+
+def _user_tz(user: User) -> ZoneInfo:
+    tz_name = (user.onboarding or {}).get("timezone", "UTC")
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return ZoneInfo("UTC")
+
+
+def _skinmax_prompt_for_concern() -> str:
+    return (
+        "Which skin concern should we focus on? Reply with a number:\n"
+        "1) Acne / Congestion\n"
+        "2) Pigmentation / Uneven Tone\n"
+        "3) Texture / Scarring\n"
+        "4) Redness / Sensitivity\n"
+        "5) Aging / Skin Quality"
+    )
+
+
+def _skinmax_summary(concern_key: str, wake_time: str, sleep_time: str) -> str:
+    concern = SKINMAX_CONCERNS[concern_key]
+    return (
+        "Skinmax reminders are set.\n\n"
+        f"AM routine ({wake_time}): {concern['am']}\n"
+        f"PM routine (1 hour before bed): {concern['pm']}\n"
+        f"Weekly care: {concern['weekly']}\n"
+        f"Sunscreen: {concern['sunscreen']}\n\n"
+        "I’ll message you at wake time and 1 hour before sleep, plus sunscreen reapply every 3 hours.\n"
+        "If you wake earlier or later, text me \"im awake\" so I can adjust."
+    )
+
+
+async def _handle_skinmax_flow(message: str, user: User) -> tuple[str | None, bool]:
+    prefs = dict(user.schedule_preferences or {})
+    skin = dict(prefs.get("skinmax") or {})
+    msg = (message or "").strip()
+    msg_lower = msg.lower()
+    updated = False
+
+    if skin.get("enabled") and skin.get("setup_complete"):
+        if msg_lower in {"im awake", "i'm awake", "im up", "i am awake", "awake"}:
+            tz = _user_tz(user)
+            local_now = datetime.now(tz)
+            skin["wake_time"] = local_now.strftime("%H:%M")
+            skin["last_wake_reported_at"] = local_now.isoformat()
+            last_sent = dict(skin.get("last_sent") or {})
+            if last_sent.get("date") == local_now.date().isoformat():
+                last_sent["am_sent"] = False
+                last_sent["sunscreen_times"] = []
+            skin["last_sent"] = last_sent
+            prefs["skinmax"] = skin
+            user.schedule_preferences = prefs
+            updated = True
+            return "Got it. You’re up. I’ll adjust today’s reminders.", updated
+        return None, False
+
+    step = skin.get("setup_step")
+    if not step:
+        skin["setup_step"] = "awaiting_wake_time"
+        skin["enabled"] = True
+        prefs["skinmax"] = skin
+        user.schedule_preferences = prefs
+        updated = True
+        return "Let’s set your Skinmax reminders. What time do you usually wake up? (e.g. 7:30 AM)", updated
+
+    if step == "awaiting_wake_time":
+        wake_time = parse_time_from_text(msg, default_meridian="am")
+        if not wake_time:
+            return "What time do you usually wake up? Example: 7:00 AM or 6:30.", False
+        skin["wake_time"] = wake_time
+        skin["setup_step"] = "awaiting_sleep_time"
+        prefs["skinmax"] = skin
+        user.schedule_preferences = prefs
+        updated = True
+        return "Got it. What time do you usually go to sleep? (e.g. 10:30 PM)", updated
+
+    if step == "awaiting_sleep_time":
+        sleep_time = parse_time_from_text(msg, default_meridian="pm")
+        if not sleep_time:
+            return "What time do you usually go to sleep? Example: 10:30 PM or 11:00.", False
+        skin["sleep_time"] = sleep_time
+        skin["setup_step"] = "awaiting_concern"
+        prefs["skinmax"] = skin
+        user.schedule_preferences = prefs
+        updated = True
+        return _skinmax_prompt_for_concern(), updated
+
+    if step == "awaiting_concern":
+        concern_key = get_concern_key(msg_lower)
+        if not concern_key:
+            return _skinmax_prompt_for_concern(), False
+        skin["concern"] = concern_key
+        skin["setup_step"] = None
+        skin["setup_complete"] = True
+        skin["enabled"] = True
+        skin.setdefault("last_sent", {})
+        prefs["skinmax"] = skin
+        user.schedule_preferences = prefs
+        updated = True
+        return _skinmax_summary(concern_key, skin.get("wake_time", "07:00"), skin.get("sleep_time", "23:00")), updated
+
+    return None, False
 
 
 @router.post("/message", response_model=ChatResponse)
@@ -27,6 +132,30 @@ async def send_message(
     from services.schedule_service import schedule_service
     user_id = current_user["id"]
     user_uuid = UUID(user_id)
+    user = await db.get(User, user_uuid)
+
+    # Skinmax setup / wake-time update flow (SMS-like)
+    if user:
+        skinmax_response, prefs_updated = await _handle_skinmax_flow(data.message, user)
+        if skinmax_response:
+            if prefs_updated:
+                user.updated_at = datetime.utcnow()
+            user_message = ChatHistory(
+                user_id=user_uuid,
+                role="user",
+                content=data.message,
+                created_at=datetime.utcnow()
+            )
+            assistant_message = ChatHistory(
+                user_id=user_uuid,
+                role="assistant",
+                content=skinmax_response,
+                created_at=datetime.utcnow()
+            )
+            db.add(user_message)
+            db.add(assistant_message)
+            await db.commit()
+            return ChatResponse(response=skinmax_response)
     
     # Get chat history
     history_result = await db.execute(

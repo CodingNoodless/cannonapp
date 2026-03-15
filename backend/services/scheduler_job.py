@@ -11,7 +11,9 @@ from sqlalchemy import select
 
 from db.sqlalchemy import AsyncSessionLocal
 from services.twilio_service import twilio_service
+from services.skinmax import SKINMAX_CONCERNS, add_minutes
 from models.sqlalchemy_models import UserSchedule, User
+from models.sqlalchemy_models import ChatHistory
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +147,129 @@ async def send_daily_progress_prompts():
         logger.error(f"Daily progress prompts job error: {e}", exc_info=True)
 
 
+def _parse_time_today(local_now: datetime, time_str: str) -> datetime | None:
+    try:
+        hour, minute = map(int, time_str.split(":"))
+        return local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    except Exception:
+        return None
+
+
+def _should_send_now(local_now: datetime, target_dt: datetime) -> bool:
+    if not target_dt:
+        return False
+    delta = (local_now - target_dt).total_seconds()
+    return 0 <= delta <= 300
+
+
+async def send_skinmax_chat_reminders():
+    """Send Skinmax reminders into chat history (SMS mimic)."""
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(User))
+            users = result.scalars().all()
+            updated = False
+
+            for user in users:
+                prefs = user.schedule_preferences or {}
+                skin = prefs.get("skinmax") or {}
+                if not skin.get("enabled") or not skin.get("setup_complete"):
+                    continue
+
+                tz_name = (user.onboarding or {}).get("timezone", "UTC")
+                try:
+                    user_tz = ZoneInfo(tz_name)
+                except Exception:
+                    user_tz = ZoneInfo("UTC")
+
+                now_utc = datetime.now(ZoneInfo("UTC"))
+                local_now = now_utc.astimezone(user_tz)
+                today_iso = local_now.date().isoformat()
+
+                wake_time = skin.get("wake_time", "07:00")
+                sleep_time = skin.get("sleep_time", "23:00")
+                concern_key = skin.get("concern", "acne")
+                concern = SKINMAX_CONCERNS.get(concern_key, SKINMAX_CONCERNS["acne"])
+
+                last_sent = dict(skin.get("last_sent") or {})
+                if last_sent.get("date") != today_iso:
+                    last_sent = {
+                        "date": today_iso,
+                        "am_sent": False,
+                        "pm_sent": False,
+                        "sunscreen_times": [],
+                    }
+
+                wake_dt = _parse_time_today(local_now, wake_time)
+                pm_time = add_minutes(sleep_time, -60)
+                pm_dt = _parse_time_today(local_now, pm_time)
+
+                sunscreen_times = []
+                if wake_dt and pm_dt and pm_dt > wake_dt:
+                    next_time = wake_dt + timedelta(hours=3)
+                    while next_time <= pm_dt:
+                        sunscreen_times.append(next_time.strftime("%H:%M"))
+                        next_time += timedelta(hours=3)
+
+                if wake_dt and not last_sent.get("am_sent") and _should_send_now(local_now, wake_dt):
+                    msg = (
+                        "Skinmax AM routine:\n"
+                        f"{concern['am']}\n\n"
+                        f"Sunscreen: {concern['sunscreen']}\n"
+                        "Reply \"im awake\" if your wake time changed."
+                    )
+                    db.add(ChatHistory(
+                        user_id=user.id,
+                        role="assistant",
+                        content=msg,
+                        created_at=datetime.utcnow()
+                    ))
+                    last_sent["am_sent"] = True
+                    updated = True
+
+                sent_times = set(last_sent.get("sunscreen_times") or [])
+                for time_str in sunscreen_times:
+                    if time_str in sent_times:
+                        continue
+                    target_dt = _parse_time_today(local_now, time_str)
+                    if target_dt and _should_send_now(local_now, target_dt):
+                        msg = "Skinmax reminder: reapply sunscreen now.\n" + concern["sunscreen"]
+                        db.add(ChatHistory(
+                            user_id=user.id,
+                            role="assistant",
+                            content=msg,
+                            created_at=datetime.utcnow()
+                        ))
+                        sent_times.add(time_str)
+                        updated = True
+
+                if pm_dt and not last_sent.get("pm_sent") and _should_send_now(local_now, pm_dt):
+                    msg = (
+                        "Skinmax PM routine (1 hour before bed):\n"
+                        f"{concern['pm']}\n\n"
+                        f"Weekly care: {concern['weekly']}"
+                    )
+                    db.add(ChatHistory(
+                        user_id=user.id,
+                        role="assistant",
+                        content=msg,
+                        created_at=datetime.utcnow()
+                    ))
+                    last_sent["pm_sent"] = True
+                    updated = True
+
+                last_sent["sunscreen_times"] = sorted(sent_times)
+                skin["last_sent"] = last_sent
+                prefs["skinmax"] = skin
+                user.schedule_preferences = prefs
+                user.updated_at = datetime.utcnow()
+
+            if updated:
+                await db.commit()
+
+    except Exception as e:
+        logger.error(f"Skinmax chat reminders job error: {e}", exc_info=True)
+
 def start_scheduler(app):
     """Start the APScheduler background job."""
     try:
@@ -163,6 +288,13 @@ def start_scheduler(app):
             "interval",
             minutes=60,
             id="daily_progress_prompts",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            send_skinmax_chat_reminders,
+            "interval",
+            minutes=5,
+            id="skinmax_chat_reminders",
             replace_existing=True,
         )
         scheduler.start()

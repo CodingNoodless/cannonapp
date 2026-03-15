@@ -78,6 +78,31 @@ async def _handle_skinmax_flow(message: str, user: User) -> tuple[str | None, bo
             if not new_time:
                 return "What time should I set your wake time to?", False
             skin["wake_time"] = new_time
+            # If the new wake time is effectively now, fire AM reminder immediately
+            tz = _user_tz(user)
+            local_now = datetime.now(tz)
+            try:
+                target_dt = local_now.replace(
+                    hour=int(new_time.split(":")[0]),
+                    minute=int(new_time.split(":")[1]),
+                    second=0,
+                    microsecond=0,
+                )
+                if abs((local_now - target_dt).total_seconds()) <= 300:
+                    concern_key = skin.get("concern", "acne")
+                    concern = SKINMAX_CONCERNS[concern_key]
+                    reminder = (
+                        "Skinmax AM routine:\n"
+                        f"{concern['am']}\n\n"
+                        f"Sunscreen: {concern['sunscreen']}\n"
+                        "Reply \"im awake\" if your wake time changed."
+                    )
+                    prefs["skinmax"] = skin
+                    user.schedule_preferences = prefs
+                    updated = True
+                    return reminder, updated
+            except Exception:
+                pass
             prefs["skinmax"] = skin
             user.schedule_preferences = prefs
             updated = True
@@ -88,6 +113,31 @@ async def _handle_skinmax_flow(message: str, user: User) -> tuple[str | None, bo
                 if not new_time:
                     return "What time should I set your bedtime to?", False
                 skin["sleep_time"] = new_time
+                # If PM reminder should be now (1h before bed), fire immediately
+                tz = _user_tz(user)
+                local_now = datetime.now(tz)
+                try:
+                    sleep_dt = local_now.replace(
+                        hour=int(new_time.split(":")[0]),
+                        minute=int(new_time.split(":")[1]),
+                        second=0,
+                        microsecond=0,
+                    )
+                    pm_dt = sleep_dt - timedelta(hours=1)
+                    if abs((local_now - pm_dt).total_seconds()) <= 300:
+                        concern_key = skin.get("concern", "acne")
+                        concern = SKINMAX_CONCERNS[concern_key]
+                        reminder = (
+                            "Skinmax PM routine (1 hour before bed):\n"
+                            f"{concern['pm']}\n\n"
+                            f"Weekly care: {concern['weekly']}"
+                        )
+                        prefs["skinmax"] = skin
+                        user.schedule_preferences = prefs
+                        updated = True
+                        return reminder, updated
+                except Exception:
+                    pass
                 prefs["skinmax"] = skin
                 user.schedule_preferences = prefs
                 updated = True

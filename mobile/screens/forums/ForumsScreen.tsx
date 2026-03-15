@@ -76,8 +76,15 @@ export default function ForumsScreen() {
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Forums</Text>
-                <Text style={styles.headerSubtitle}>Channels and discussions</Text>
+                <View style={styles.headerTopRow}>
+                    <Text style={styles.headerTitle}>Forums</Text>
+                    {page === 'community' && (
+                        <TouchableOpacity style={styles.createButton} onPress={() => setCreateVisible(true)} activeOpacity={0.7}>
+                            <Ionicons name="add" size={16} color={colors.background} />
+                            <Text style={styles.createButtonText}>Create</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
                 <View style={styles.filterRow}>
                     {(['community', 'official'] as const).map((key) => (
                         <TouchableOpacity
@@ -91,14 +98,7 @@ export default function ForumsScreen() {
                             </Text>
                         </TouchableOpacity>
                     ))}
-                    {page === 'community' && (
-                        <TouchableOpacity style={styles.createButton} onPress={() => setCreateVisible(true)} activeOpacity={0.7}>
-                            <Ionicons name="add" size={16} color={colors.background} />
-                            <Text style={styles.createButtonText}>Create Forum</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-                <View style={styles.sortRow}>
+                    <View style={styles.sortRow}>
                     {(['new', 'top'] as const).map((key) => (
                         <TouchableOpacity
                             key={key}
@@ -112,6 +112,22 @@ export default function ForumsScreen() {
                             </Text>
                         </TouchableOpacity>
                     ))}
+                    </View>
+                </View>
+                <View style={styles.searchContainer}>
+                    <Ionicons name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search forums..."
+                        placeholderTextColor={colors.textMuted}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                    {searchQuery !== '' && (
+                        <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                            <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+                        </TouchableOpacity>
+                    )}
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
                     {categoryOptions.map((cat) => (
@@ -127,21 +143,6 @@ export default function ForumsScreen() {
                         </TouchableOpacity>
                     ))}
                 </ScrollView>
-                <View style={styles.searchContainer}>
-                    <Ionicons name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
-                    <TextInput
-                        style={styles.searchInput}
-                        placeholder="Search channels..."
-                        placeholderTextColor={colors.textMuted}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                    />
-                    {searchQuery !== '' && (
-                        <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                            <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-                        </TouchableOpacity>
-                    )}
-                </View>
             </View>
 
             {loading && forums.length === 0 ? (
@@ -216,10 +217,10 @@ export default function ForumsScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+    header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+    headerTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
     headerTitle: { fontSize: 26, fontWeight: '700', color: colors.foreground, letterSpacing: -0.5 },
-    headerSubtitle: { fontSize: 14, color: colors.textMuted, marginTop: 4, marginBottom: spacing.lg },
-    filterRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, alignItems: 'center' },
+    filterRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
     filterPill: {
         paddingHorizontal: 12,
         paddingVertical: 6,
@@ -233,12 +234,12 @@ const styles = StyleSheet.create({
     filterTextActive: { color: colors.background },
     createButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.foreground, paddingHorizontal: 10, paddingVertical: 6, borderRadius: borderRadius.full },
     createButtonText: { color: colors.background, fontSize: 12, fontWeight: '600' },
-    sortRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+    sortRow: { flexDirection: 'row', gap: spacing.sm },
     sortPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: borderRadius.full, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
     sortPillActive: { backgroundColor: colors.foreground, borderColor: colors.foreground },
     sortText: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
     sortTextActive: { color: colors.background },
-    categoryRow: { marginBottom: spacing.md },
+    categoryRow: { marginTop: spacing.sm, marginBottom: spacing.sm },
     categoryPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: borderRadius.full, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, marginRight: spacing.sm },
     categoryPillActive: { backgroundColor: colors.foreground, borderColor: colors.foreground },
     categoryText: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },

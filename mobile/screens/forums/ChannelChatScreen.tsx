@@ -44,6 +44,7 @@ export default function ChannelChatScreen() {
     const [channelDescription, setChannelDescription] = useState<string | null>(null);
     const [channelCategory, setChannelCategory] = useState<string | null>(null);
     const [channelTags, setChannelTags] = useState<string[]>([]);
+    const userTimeZone = user?.onboarding?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
     const flatListRef = useRef<FlatList>(null);
     const isAdmin = user?.is_admin || false;
     const currentUserId = user?.id;
@@ -55,12 +56,31 @@ export default function ChannelChatScreen() {
         return () => interval && clearInterval(interval);
     }, [channelId, searchQuery, isSearching]));
 
+    const parseTimestamp = (dateString: string) => {
+        if (!dateString) return 0;
+        const hasTz = /[zZ]|[+-]\d{2}:?\d{2}$/.test(dateString);
+        const normalized = hasTz ? dateString : `${dateString}Z`;
+        const time = new Date(normalized).getTime();
+        return Number.isNaN(time) ? 0 : time;
+    };
+
+    const formatTime = (dateString: string) => {
+        const dt = new Date(parseTimestamp(dateString));
+        return new Intl.DateTimeFormat(undefined, {
+            hour: '2-digit',
+            minute: '2-digit',
+            month: 'short',
+            day: 'numeric',
+            timeZone: userTimeZone,
+        }).format(dt);
+    };
+
     const loadMessages = async () => {
         try {
             const data = await api.getChannelMessages(channelId, 50, searchQuery);
             const sorted = (data.messages || []).slice().sort((a: Message, b: Message) => {
-                const at = new Date(a.created_at).getTime();
-                const bt = new Date(b.created_at).getTime();
+                const at = parseTimestamp(a.created_at);
+                const bt = parseTimestamp(b.created_at);
                 if (at !== bt) return at - bt;
                 return a.id.localeCompare(b.id);
             });
@@ -96,8 +116,8 @@ export default function ChannelChatScreen() {
             const result = await api.sendChannelMessage(channelId, messageText.trim() || '', replyingTo?.id, attachmentUrl, attachmentType);
             if (result.message) {
                 setMessages(prev => [...prev, result.message].sort((a, b) => {
-                    const at = new Date(a.created_at).getTime();
-                    const bt = new Date(b.created_at).getTime();
+                    const at = parseTimestamp(a.created_at);
+                    const bt = parseTimestamp(b.created_at);
                     if (at !== bt) return at - bt;
                     return a.id.localeCompare(b.id);
                 }));
@@ -123,9 +143,6 @@ export default function ChannelChatScreen() {
         try { const result = await api.toggleReaction(channelId, messageId, emoji); setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions: result.reactions } : m)); } catch (e) { console.error(e); }
     };
 
-    const formatTime = (dateString: string) =>
-        new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
     const getDisplayName = (message: Message) => {
         if (message.username && message.username.trim().length > 0) return message.username;
         return message.user_email.split('@')[0];
@@ -144,6 +161,9 @@ export default function ChannelChatScreen() {
         const repliedMessage = item.parent_id ? messages.find(m => m.id === item.parent_id) : null;
         const isHighlighted = highlightedId === item.id;
         const isReply = !!item.parent_id;
+        const upvotes = (item.reactions?.['⬆️'] || []).length;
+        const downvotes = (item.reactions?.['⬇️'] || []).length;
+        const score = upvotes - downvotes;
 
         return (
             <View style={[styles.messageRow, isReply && styles.replyRow, isHighlighted && styles.messageHighlight]}>
@@ -163,7 +183,10 @@ export default function ChannelChatScreen() {
                 <View style={styles.contentColumn}>
                     <View style={styles.metaRow}>
                         <Text style={styles.postIndex}>#{index + 1}</Text>
-                        <Text style={styles.metaTime}>{new Date(item.created_at).toLocaleString()}</Text>
+                        <Text style={styles.metaTime}>{formatTime(item.created_at)}</Text>
+                        <View style={styles.votePill}>
+                            <Text style={styles.voteScore}>{score}</Text>
+                        </View>
                     </View>
                     {repliedMessage && (
                         <TouchableOpacity
@@ -186,6 +209,12 @@ export default function ChannelChatScreen() {
                     </View>
                     {renderReactions(item)}
                     <View style={styles.messageActions}>
+                        <TouchableOpacity onPress={() => handleToggleReaction(item.id, '⬆️')} style={styles.actionBtn}>
+                            <Ionicons name="arrow-up" size={14} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleToggleReaction(item.id, '⬇️')} style={styles.actionBtn}>
+                            <Ionicons name="arrow-down" size={14} color={colors.textMuted} />
+                        </TouchableOpacity>
                         <TouchableOpacity onPress={() => setReplyingTo(item)} style={styles.actionBtn}>
                             <Ionicons name="arrow-undo" size={14} color={colors.textMuted} />
                         </TouchableOpacity>
@@ -374,6 +403,8 @@ const styles = StyleSheet.create({
     metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
     postIndex: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
     metaTime: { fontSize: 11, color: colors.textMuted },
+    votePill: { backgroundColor: colors.surface, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: colors.border },
+    voteScore: { fontSize: 11, color: colors.textSecondary, fontWeight: '600' },
     replyContext: {
         flexDirection: 'row',
         alignItems: 'center',

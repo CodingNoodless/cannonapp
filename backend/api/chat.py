@@ -243,6 +243,11 @@ async def get_chat_history(
 ):
     """Get chat history"""
     user_uuid = UUID(current_user["id"])
+    # If user wants skinmax and hasn't set it up, seed the conversation
+    user = await db.get(User, user_uuid)
+    goals = (user.onboarding or {}).get("goals", []) if user else []
+    skin = (user.schedule_preferences or {}).get("skinmax", {}) if user else {}
+
     result = await db.execute(
         select(ChatHistory)
         .where(ChatHistory.user_id == user_uuid)
@@ -250,6 +255,25 @@ async def get_chat_history(
         .limit(limit)
     )
     rows = list(reversed(result.scalars().all()))
+
+    should_seed = (
+        user
+        and "skinmax" in goals
+        and not skin.get("setup_complete")
+        and len(rows) == 0
+    )
+    if should_seed:
+        prompt = "Let’s set your Skinmax reminders. What time do you usually wake up? (e.g. 7:30 AM)"
+        assistant_message = ChatHistory(
+            user_id=user_uuid,
+            role="assistant",
+            content=prompt,
+            created_at=datetime.utcnow()
+        )
+        db.add(assistant_message)
+        await db.commit()
+        rows = [assistant_message]
+
     return {"messages": [
         {"role": r.role, "content": r.content, "created_at": r.created_at}
         for r in rows

@@ -58,7 +58,13 @@ export default function ChannelChatScreen() {
     const loadMessages = async () => {
         try {
             const data = await api.getChannelMessages(channelId, 50, searchQuery);
-            setMessages(data.messages || []);
+            const sorted = (data.messages || []).slice().sort((a: Message, b: Message) => {
+                const at = new Date(a.created_at).getTime();
+                const bt = new Date(b.created_at).getTime();
+                if (at !== bt) return at - bt;
+                return a.id.localeCompare(b.id);
+            });
+            setMessages(sorted);
             if (data.is_admin_only !== undefined) setIsAdminOnly(data.is_admin_only);
             if (data.channel_description !== undefined) setChannelDescription(data.channel_description);
             if (data.channel_category !== undefined) setChannelCategory(data.channel_category);
@@ -88,7 +94,14 @@ export default function ChannelChatScreen() {
                 const uploadRes = await api.uploadChatFile(formData); attachmentUrl = uploadRes.url; attachmentType = 'image'; setUploading(false);
             }
             const result = await api.sendChannelMessage(channelId, messageText.trim() || '', replyingTo?.id, attachmentUrl, attachmentType);
-            if (result.message) setMessages(prev => [...prev, result.message]);
+            if (result.message) {
+                setMessages(prev => [...prev, result.message].sort((a, b) => {
+                    const at = new Date(a.created_at).getTime();
+                    const bt = new Date(b.created_at).getTime();
+                    if (at !== bt) return at - bt;
+                    return a.id.localeCompare(b.id);
+                }));
+            }
             setMessageText(''); setReplyingTo(null); setSelectedImage(null);
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         } catch (e) { console.error(e); } finally { setSending(false); setUploading(false); }

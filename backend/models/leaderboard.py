@@ -55,6 +55,7 @@ class ChatRequest(BaseModel):
     message: str
     attachment_url: Optional[str] = None
     attachment_type: Optional[str] = None
+    client_timezone: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

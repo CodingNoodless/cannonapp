@@ -219,6 +219,13 @@ async def send_message(
     user_id = current_user["id"]
     user_uuid = UUID(user_id)
     user = await db.get(User, user_uuid)
+    # Update timezone from client if missing or blank
+    if user and data.client_timezone:
+        onboarding = dict(user.onboarding or {})
+        if not onboarding.get("timezone"):
+            onboarding["timezone"] = data.client_timezone
+            user.onboarding = onboarding
+            user.updated_at = datetime.utcnow()
 
     # Skinmax setup / wake-time update flow (SMS-like)
     if user:

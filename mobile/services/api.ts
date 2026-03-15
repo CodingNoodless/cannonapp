@@ -319,10 +319,18 @@ class ApiService {
 
     // Chat
     async sendChatMessage(message: string, attachmentUrl?: string, attachmentType?: string) {
+        let clientTimezone: string | undefined = undefined;
+        try {
+            // Works on web and most RN runtimes
+            clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        } catch {
+            clientTimezone = undefined;
+        }
         const response = await this.client.post('chat/message', {
             message,
             attachment_url: attachmentUrl,
-            attachment_type: attachmentType
+            attachment_type: attachmentType,
+            client_timezone: clientTimezone,
         });
         return response.data;
     }

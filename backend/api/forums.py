@@ -42,6 +42,7 @@ async def list_channels(
     q: str = None,
     current_user: dict = Depends(require_paid_user),
     rds_db: AsyncSession = Depends(get_rds_db),
+    db: AsyncSession = Depends(get_db),
 ):
     query = select(Forum)
     if q:
@@ -54,12 +55,19 @@ async def list_channels(
     result = await rds_db.execute(query)
     channels = result.scalars().all()
 
+    creator_ids = list({ch.created_by for ch in channels if ch.created_by})
+    creators_map = {}
+    if creator_ids:
+        creators_result = await db.execute(select(User).where(User.id.in_(creator_ids)))
+        creators_map = {u.id: u for u in creators_result.scalars().all()}
+
     forums = []
     for ch in channels:
         count_result = await rds_db.execute(
             select(func.count(ChannelMessage.id)).where(ChannelMessage.channel_id == ch.id)
         )
         message_count = count_result.scalar() or 0
+        creator = creators_map.get(ch.created_by) if ch.created_by else None
         forums.append({
             "id": str(ch.id),
             "name": ch.name,
@@ -69,7 +77,11 @@ async def list_channels(
             "category": ch.category,
             "tags": ch.tags or [],
             "is_admin_only": ch.is_admin_only,
-            "message_count": message_count
+            "message_count": message_count,
+            "created_by": str(ch.created_by) if ch.created_by else None,
+            "created_by_username": creator.username if creator else None,
+            "created_by_avatar_url": (creator.profile or {}).get("avatar_url") if creator else None,
+            "created_at": ch.created_at,
         })
     return {"forums": forums}
 
@@ -213,6 +225,10 @@ async def toggle_reaction(
     rds_db: AsyncSession = Depends(get_rds_db),
 ):
     """Add or remove an emoji reaction to a message"""
+    UPVOTE = "⬆️"
+    DOWNVOTE = "⬇️"
+    LEGACY_UPVOTE = "â¬†ï¸"
+    LEGACY_DOWNVOTE = "â¬‡ï¸"
     user_id = current_user["id"]
     try:
         message_uuid = UUID(message_id)
@@ -224,6 +240,8 @@ async def toggle_reaction(
         raise HTTPException(status_code=404, detail="Message not found")
 
     reactions = message.reactions or {}
+    normalized_emoji = UPVOTE if emoji == LEGACY_UPVOTE else DOWNVOTE if emoji == LEGACY_DOWNVOTE else emoji
+    emoji = normalized_emoji
     if emoji not in reactions:
         reactions[emoji] = []
     
@@ -233,6 +251,18 @@ async def toggle_reaction(
             del reactions[emoji]
     else:
         reactions[emoji].append(user_id)
+
+    if emoji in {UPVOTE, DOWNVOTE}:
+        opposite = DOWNVOTE if emoji == UPVOTE else UPVOTE
+        if opposite in reactions and user_id in reactions[opposite]:
+            reactions[opposite].remove(user_id)
+            if not reactions[opposite]:
+                del reactions[opposite]
+
+    if LEGACY_UPVOTE in reactions:
+        del reactions[LEGACY_UPVOTE]
+    if LEGACY_DOWNVOTE in reactions:
+        del reactions[LEGACY_DOWNVOTE]
 
     message.reactions = reactions
     await rds_db.commit()
@@ -267,6 +297,7 @@ async def create_channel(
         tags=data.tags or [],
         order=data.order or 0,
         is_admin_only=data.is_admin_only,
+        created_by=UUID(current_user["id"]),
         created_at=datetime.utcnow()
     )
     rds_db.add(channel)

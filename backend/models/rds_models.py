@@ -91,6 +91,7 @@ class Forum(Base):
     tags = Column(JSON, default=list)
     order = Column(Integer, default=0)
     is_admin_only = Column(Boolean, default=False)
+    created_by = Column(UUID(as_uuid=True))
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     __table_args__ = (

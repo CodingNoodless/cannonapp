@@ -96,8 +96,8 @@ class TwilioService:
         """Welcome message sent after successful signup"""
         name = email.split("@")[0].capitalize()
         message = (
-            f"👋 Welcome to *Cannon*, {name}!\n\n"
-            f"You're now part of the Cannon community — the #1 looksmaxxing platform.\n\n"
+            f"👋 Welcome to *Max*, {name}!\n\n"
+            f"You're now part of the Max community — the #1 looksmaxxing platform.\n\n"
             f"🎯 Complete your first face scan to get your personal analysis and score.\n\n"
             f"Let's get started! 🚀"
         )
@@ -108,16 +108,16 @@ class TwilioService:
         name = email.split("@")[0].capitalize()
         score_text = f"*{overall_score:.1f}/10*" if overall_score is not None else "ready"
         message = (
-            f"✅ Hey {name}, your Cannon face scan is complete!\n\n"
+            f"✅ Hey {name}, your Max face scan is complete!\n\n"
             f"📊 Your overall score: {score_text}\n\n"
-            f"Open the Cannon app to see your full analysis and personalized recommendations. 💪"
+            f"Open the Max app to see your full analysis and personalized recommendations. 💪"
         )
         return bool(await self.send_whatsapp(phone, message))
 
     async def send_schedule_reminder(self, phone: str, task_title: str, task_description: str, task_time: str) -> bool:
         """Send a WhatsApp reminder for a scheduled task"""
         message = (
-            f"⏰ *Cannon Reminder* — {task_time}\n\n"
+            f"⏰ *Max Reminder* — {task_time}\n\n"
             f"💪 *{task_title}*\n"
             f"{task_description}\n\n"
             f"Open the app to mark it done! ✅"

@@ -1,5 +1,5 @@
 """
-Cannon App - Configuration Management
+Max App - Configuration Management
 Loads environment variables with validation using Pydantic Settings
 """
 
@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     aws_s3_region: str = Field(default="us-east-1")
     
     # Application
-    app_name: str = Field(default="Cannon")
+    app_name: str = Field(default="Max")
     app_env: str = Field(default="development")
     debug: bool = Field(default=True)
     api_version: str = Field(default="v1")

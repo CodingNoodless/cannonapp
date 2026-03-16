@@ -1,5 +1,5 @@
 """
-Cannon App - FastAPI Backend
+Max App - FastAPI Backend
 Main application entry point
 """
 
@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="Cannon API",
+    title="Max API",
     description="Premium Lookmaxxing App Backend",
     version="1.0.0",
     lifespan=lifespan
@@ -97,7 +97,7 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 @app.get("/")
 async def root():
-    return {"message": "Cannon API", "version": "1.0.0"}
+    return {"message": "Max API", "version": "1.0.0"}
 
 
 @app.get("/health")

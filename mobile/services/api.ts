@@ -414,7 +414,7 @@ class ApiService {
         return response.data;
     }
 
-    // Admin: Chat as Cannon for a specific user
+    // Admin: Chat as Max for a specific user
     async getAdminUserChat(userId: string) {
         const response = await this.client.get(`admin/users/${userId}/chat`);
         return response.data;

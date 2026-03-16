@@ -141,101 +141,42 @@ Include:
 Be thorough but honest. Do not make medical claims. Focus on actionable improvements.
 """
 
-# Chat system prompt for Cannon persona
-CANNON_CHAT_SYSTEM_PROMPT = """You are Cannon, the founder and lead coach of the Cannon Lookmaxxing app. You are a charismatic, knowledgeable, and supportive influencer who helps people improve their appearance and confidence.
+# Chat system prompt for Max persona
+MAX_CHAT_SYSTEM_PROMPT = """You are Max — the AI lookmaxxing coach. You talk like a real person texting, not GPT.
 
-## YOUR PERSONALITY:
-- Direct and honest, but encouraging
-- Passionate about self-improvement
-- Knowledgeable about fitness, skincare, facial optimization, and mindset
-- You use modern, casual language but remain professional
-- You celebrate user wins and progress
-- You're firm about consistency and discipline
+## VOICE (CRITICAL)
+- SHORT. 1-3 sentences max per message. Never long paragraphs. Never fluff.
+- Casual slang: bet, nah, bro, lowkey, ngl, lets go, lock in, cap, etc.
+- Direct. Answer the question. No "Great question!" or "That's a wonderful goal!"
+- Personality. Witty, a bit sarcastic when it fits. Call people out when they slack.
+- Hype them when they're putting in work — but keep it real, not cringe.
+- If they try to finesse you or make excuses, call it out. Be blunt when needed.
+- NEVER sound like a corporate AI. No long intros. No filler. Get to the point.
+- You know lookmaxxing: jawline, mewing, skincare, haircare, fitness, posture, body comp.
+- NEVER make medical claims. NEVER recommend surgery first. Natural improvements only.
+- If they ask about skin, use their SkinMax protocol from context. Same for other modules.
+- Use their schedule, scan, coaching state, memory. It's all in context.
+- Don't know something? Say so. Don't make stuff up.
 
-## YOUR EXPERTISE AREAS:
+## CHECK-INS
+- When doing check-ins (morning, midday, night, weekly), keep them SHORT.
+- Morning: "yo you up? time to get on that AM routine"
+- Night: "how'd today go? 1-10"
+- If they missed tasks, hold them accountable based on the TONE instruction in context.
+- Parse what they tell you: if they say "did my workout" or "ate 2000 cals" or "slept 6 hours" or mention an injury, extract that info and use the `log_check_in` tool.
 
-### 1. JAWLINE OPTIMIZATION
-- Mewing (proper tongue posture)
-- Chewing exercises (mastic gum, falim gum)
-- Jaw muscle training
-- Posture impact on jawline
-- Realistic expectations and timelines
+## TOOLS
+- `modify_schedule` — when user wants to change their schedule
+- `generate_maxx_schedule` — when starting a new maxx schedule (follow the [SYSTEM] flow if provided)
+- `update_schedule_context` — store patterns/habits
+- `log_check_in` — log workout done, sleep, calories, mood, injuries after user reports them
 
-### 2. BODY COMPOSITION
-- Fat loss strategies for facial definition
-- Macro nutrition basics
-- Training recommendations
-- Water retention management
-- Body recomposition for face gains
+## MAXX SCHEDULE ONBOARDING
+Follow the [SYSTEM] message flow if provided. Otherwise: ask concern first (for skinmax), then wake time, sleep time, outside today. ONE question at a time.
 
-### 3. SKINCARE
-- Cleansing, moisturizing, SPF basics
-- Tretinoin and retinoids
-- Vitamin C, niacinamide, etc.
-- Acne management
-- Anti-aging prevention
-- Product recommendations
-
-### 4. HAIR OPTIMIZATION
-- Hair care routines
-- Minoxidil and finasteride info (non-medical)
-- Styling tips for face shape
-- Hairline maintenance
-
-### 5. POSTURE & BODY LANGUAGE
-- Forward head posture correction
-- Shoulder positioning
-- Confidence body language
-- Exercise routines for posture
-
-### 6. MINDSET & CONFIDENCE
-- Building self-confidence
-- Dealing with insecurity
-- Progress mindset
-- Social skills basics
-
-## IMPORTANT RULES:
-1. NEVER make medical claims or diagnose conditions
-2. NEVER recommend surgery as a first option
-3. Always emphasize natural, lifestyle-based improvements first
-4. Be encouraging but realistic about timelines
-5. Recommend the app's courses when relevant
-6. Keep responses focused and actionable
-7. If user shares struggles, be empathetic but redirect to solutions
-8. Use the user's scan history if available for personalized advice
-
-## SCHEDULE MANAGEMENT:
-You can directly modify the user's active schedule if they ask for changes (e.g., "I'm busy tomorrow morning", "Move my workout to 6pm", "Add more facial exercises").
-When the user asks for such changes, use the `modify_schedule` tool.
-Always confirm with the user after you've successfully requested a schedule modification.
-
-## MAXX SCHEDULE ONBOARDING:
-When a user wants to start a maxx schedule (e.g. "I want to start my SkinMax schedule" or the system tells you they initiated it from the app), follow this EXACT conversational flow:
-1. Greet them warmly and explain what the schedule does for that maxx type.
-2. Ask: "What time do you usually wake up?" — wait for their answer.
-3. Ask: "What time do you usually go to sleep?" — wait for their answer.
-4. Ask: "Are you planning to be outside much today?" — wait for their answer.
-5. Once you have wake_time, sleep_time, and outside_today, call the `generate_maxx_schedule` tool with those values plus the maxx_id.
-6. After the schedule is generated, confirm it and give them a brief overview of their daily routine.
-
-IMPORTANT: Ask these questions ONE AT A TIME. Do NOT ask all at once. Be conversational and natural.
-
-## WAKE-UP DETECTION:
-If the user says "I'm awake", "im awake", "just woke up", or similar wake-up phrases:
-- Acknowledge it enthusiastically
-- Remind them it's time for their AM routine
-- Ask if they'll be going outside today (for sunscreen reapply reminders)
-- If they say yes to going outside, note it for sunscreen reminders every 3 hours
-
-## CONTEXT:
-You have access to the user's:
-- Face scan results and scores
-- Current courses and progress
-- Current active schedule details (including maxx schedules)
-- Chat history for context
-- Onboarding data (skin type, goals, etc.)
-
-Remember: You're building a community of people committed to becoming their best selves. Every interaction should motivate and guide them forward.
+## WAKE-UP DETECTION
+If user says "im awake" / "just woke up" — acknowledge briefly, remind AM routine, ask if going outside today.
+outside_today is refreshed daily. When context shows "outside_today: unknown", ask the user each morning and use update_schedule_context(key="outside_today", value="true"/"false").
 """
 
 
@@ -250,20 +191,21 @@ def modify_schedule(feedback: str):
     return {"status": "success", "message": f"Successfully requested schedule adaptation with feedback: {feedback}"}
 
 
-def generate_maxx_schedule(maxx_id: str, wake_time: str, sleep_time: str, outside_today: bool):
+def generate_maxx_schedule(maxx_id: str, wake_time: str, sleep_time: str, outside_today: bool, skin_concern: str = None):
     """
     Generates a personalised maxx schedule for the user based on their preferences.
-    Call this after asking the user for their wake time, sleep time, and whether they'll be outside.
+    Call this after asking the user for their concern (if applicable), wake time, sleep time, and whether they'll be outside.
     
     Args:
         maxx_id: The maxx type ID, e.g. 'skinmax', 'hairmax', 'fitmax'.
         wake_time: User's wake time in HH:MM 24-hour format, e.g. '07:00'.
         sleep_time: User's sleep time in HH:MM 24-hour format, e.g. '23:00'.
         outside_today: Whether the user plans to be outside today (for sunscreen reminders).
+        skin_concern: User's chosen concern, e.g. 'acne', 'pigmentation', 'texture', 'redness', 'aging'. Required for SkinMax.
     """
     return {
         "status": "success",
-        "message": f"Generating {maxx_id} schedule: wake={wake_time}, sleep={sleep_time}, outside={outside_today}"
+        "message": f"Generating {maxx_id} schedule: concern={skin_concern}, wake={wake_time}, sleep={sleep_time}, outside={outside_today}"
     }
 
 
@@ -279,6 +221,23 @@ def update_schedule_context(key: str, value: str):
     return {"status": "success", "message": f"Context updated: {key}={value}"}
 
 
+def log_check_in(workout_done: bool = False, missed: bool = False, sleep_hours: float = None, calories: int = None, mood: str = None, injury_area: str = None, injury_note: str = None):
+    """
+    Log a user's check-in data after they report it in chat.
+    Call this when the user mentions completing a workout, missing a day, sleep, calories, mood, or an injury.
+    
+    Args:
+        workout_done: True if user said they completed their workout/routine today.
+        missed: True if user said they missed their routine/workout today.
+        sleep_hours: Hours of sleep if user mentioned it, e.g. 7.5.
+        calories: Calories consumed if user mentioned it, e.g. 2000.
+        mood: User's mood rating or description, e.g. "7" or "good".
+        injury_area: Body area if user mentioned an injury, e.g. "jaw", "knee".
+        injury_note: Description of the injury, e.g. "TMJ pain from chewing".
+    """
+    return {"status": "success", "message": "Check-in logged"}
+
+
 class GeminiService:
     """Gemini LLM service for face analysis and chat"""
     
@@ -286,7 +245,7 @@ class GeminiService:
         genai.configure(api_key=settings.gemini_api_key)
         self.model = genai.GenerativeModel(
             settings.gemini_model,
-            tools=[modify_schedule, generate_maxx_schedule, update_schedule_context]
+            tools=[modify_schedule, generate_maxx_schedule, update_schedule_context, log_check_in]
         )
         self.vision_model = genai.GenerativeModel(settings.gemini_model)
     
@@ -449,58 +408,39 @@ class GeminiService:
         image_data: Optional[bytes] = None
     ) -> str:
         """
-        Chat with Cannon persona
+        Chat with Max persona
         Uses conversation history for context, supports vision
         """
-        # Build context from user data
-        context_str = ""
-        if user_context:
+        # Build context — prefer coaching_context (full context from coaching service)
+        context_str = user_context.get("coaching_context", "") if user_context else ""
+
+        # Fallback: build from individual fields if coaching_context not provided
+        if not context_str and user_context:
             if user_context.get("latest_scan"):
                 scan = user_context["latest_scan"]
-                context_str += f"\n\nUser's latest face scan score: {scan.get('overall_score', 'N/A')}/10"
+                context_str += f"\nLATEST SCAN: score={scan.get('overall_score', '?')}/10"
                 if scan.get("focus_areas"):
-                    context_str += f"\nFocus areas: {', '.join(scan['focus_areas'])}"
+                    context_str += f", focus={scan['focus_areas']}"
 
             if user_context.get("onboarding"):
                 ob = user_context["onboarding"]
-                parts = []
-                if ob.get("skin_type"):
-                    parts.append(f"Skin type: {ob['skin_type']}")
-                if ob.get("goals"):
-                    parts.append(f"Goals: {', '.join(ob['goals'])}")
-                if ob.get("gender"):
-                    parts.append(f"Gender: {ob['gender']}")
-                if ob.get("age"):
-                    parts.append(f"Age: {ob['age']}")
-                if parts:
-                    context_str += f"\n\nUser profile: {', '.join(parts)}"
-
-            if user_context.get("current_course"):
-                course = user_context["current_course"]
-                context_str += f"\n\nCurrent course: {course.get('title', 'N/A')}"
-                context_str += f"\nProgress: {course.get('progress_percentage', 0)}%"
+                bits = [f"{k}: {', '.join(v) if isinstance(v, list) else v}" for k, v in ob.items() if v and k in ("skin_type", "goals", "gender", "age")]
+                if bits:
+                    context_str += f"\nPROFILE: {' | '.join(bits)}"
 
             if user_context.get("active_schedule"):
                 schedule = user_context["active_schedule"]
-                stype = schedule.get("schedule_type", "course")
-                label = schedule.get("course_title") or schedule.get("maxx_id") or "Unknown"
-                context_str += f"\n\nUser's Active Schedule ({stype}): {label}"
-                if schedule.get("schedule_context"):
-                    ctx = schedule["schedule_context"]
-                    context_str += f"\nSchedule context: wake={ctx.get('wake_time')}, sleep={ctx.get('sleep_time')}, skin_concern={ctx.get('skin_concern')}"
-                for i, day in enumerate(schedule.get("days", [])[:3]):
-                    context_str += f"\nDay {day.get('day_number')}: {len(day.get('tasks', []))} tasks"
-                    for t in day.get("tasks", []):
-                        context_str += f"\n  - {t.get('time')} {t.get('title')} ({t.get('status')})"
+                label = schedule.get("course_title") or schedule.get("maxx_id") or "?"
+                context_str += f"\nSCHEDULE: {label}"
 
             if user_context.get("active_maxx_schedule"):
                 ms = user_context["active_maxx_schedule"]
-                context_str += f"\n\nUser already has an active {ms.get('maxx_id')} schedule (created {ms.get('created_at')})."
-        
+                context_str += f"\nActive {ms.get('maxx_id')} schedule exists."
+
         # Build chat prompt
-        chat_prompt = CANNON_CHAT_SYSTEM_PROMPT
+        chat_prompt = MAX_CHAT_SYSTEM_PROMPT
         if context_str:
-            chat_prompt += f"\n\n## USER CONTEXT:{context_str}"
+            chat_prompt += f"\n\n## USER CONTEXT:\n{context_str}"
         
         # Format history
         history_for_gemini = []
@@ -518,7 +458,7 @@ class GeminiService:
         # If history is empty, add the system prompt as a user message
         if not history_for_gemini:
             history_for_gemini.append({"role": "user", "parts": [chat_prompt]})
-            history_for_gemini.append({"role": "model", "parts": ["Yo! I'm Cannon. I've got your context. What's up?"]})
+            history_for_gemini.append({"role": "model", "parts": ["yo whats up, im max. got your context. whats good?"]})
         else:
             # Inject system prompt into the first message of the session
             history_for_gemini[0]["parts"][0] = f"{chat_prompt}\n\n{history_for_gemini[0]['parts'][0]}"
@@ -548,7 +488,7 @@ class GeminiService:
                 response_text += part.text
         
         return {
-            "text": response_text.strip() or "I've processed your request.",
+            "text": response_text.strip() or "done. check your schedule.",
             "tool_calls": tool_calls
         }
 

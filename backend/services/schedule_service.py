@@ -17,11 +17,10 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from config import settings
 from services.gemini_service import GeminiService
-from services.maxx_guidelines import (
-    get_maxx_guideline,
-    resolve_skin_concern,
-    build_skinmax_prompt_section,
-    MAXX_GUIDELINES,
+from services.guideline_service import (
+    get_maxx_guideline_async,
+    resolve_concern,
+    build_protocol_prompt_section,
 )
 from models.sqlalchemy_models import User, UserSchedule, Scan
 from models.rds_models import Course
@@ -297,6 +296,7 @@ class ScheduleService:
         user_id: str,
         maxx_id: str,
         db: AsyncSession,
+        rds_db: Optional[AsyncSession] = None,
         wake_time: str = "07:00",
         sleep_time: str = "23:00",
         skin_concern: Optional[str] = None,
@@ -304,7 +304,7 @@ class ScheduleService:
         num_days: int = 7,
     ) -> dict:
         """Generate a personalised recurring schedule for a maxx module."""
-        guideline = get_maxx_guideline(maxx_id)
+        guideline = await get_maxx_guideline_async(maxx_id, rds_db)
         if not guideline:
             raise ValueError(f"Unknown maxx: {maxx_id}")
 
@@ -313,8 +313,8 @@ class ScheduleService:
         onboarding = (user.onboarding if user else {}) or {}
 
         skin_type = onboarding.get("skin_type", "normal")
-        concern = resolve_skin_concern(skin_type, skin_concern)
-        protocol_section = build_skinmax_prompt_section(concern)
+        concern = resolve_concern(guideline, skin_type, skin_concern)
+        protocol_section = build_protocol_prompt_section(guideline, concern)
 
         profile_parts = []
         if onboarding.get("gender"):
@@ -382,6 +382,7 @@ class ScheduleService:
             "notification_minutes_before": 5,
         }
 
+        start_date_iso = datetime.now(user_tz).date().isoformat()
         schedule_row = UserSchedule(
             user_id=user_uuid,
             schedule_type="maxx",
@@ -393,6 +394,7 @@ class ScheduleService:
                 "skin_concern": concern,
                 "skin_type": skin_type,
                 "outside_today": outside_today,
+                "outside_today_date": start_date_iso,
                 "wake_time": wake_time,
                 "sleep_time": sleep_time,
             },
@@ -661,6 +663,17 @@ class ScheduleService:
             raise ValueError("Schedule not found")
         ctx = schedule.schedule_context or {}
         ctx.update(context_updates)
+
+        # When outside_today is updated, set outside_today_date so we can refresh daily
+        if "outside_today" in context_updates:
+            user = await db.get(User, schedule.user_id)
+            tz_name = (user.onboarding or {}).get("timezone", "UTC") if user else "UTC"
+            try:
+                user_tz = ZoneInfo(tz_name)
+            except Exception:
+                user_tz = ZoneInfo("UTC")
+            ctx["outside_today_date"] = datetime.now(user_tz).date().isoformat()
+
         schedule.schedule_context = ctx
         flag_modified(schedule, "schedule_context")
         schedule.updated_at = datetime.utcnow()

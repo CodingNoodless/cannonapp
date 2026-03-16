@@ -63,6 +63,14 @@ SKINMAX_PROTOCOLS = {
 # ---------------------------------------------------------------------------
 # Generic guidelines dict (future maxxes plug in here)
 # ---------------------------------------------------------------------------
+SKINMAX_CONCERNS = [
+    {"id": "acne", "label": "Acne / Congestion"},
+    {"id": "pigmentation", "label": "Pigmentation / Uneven Tone"},
+    {"id": "texture", "label": "Texture / Scarring"},
+    {"id": "redness", "label": "Redness / Sensitivity"},
+    {"id": "aging", "label": "Aging / Skin Quality"},
+]
+
 MAXX_GUIDELINES = {
     "skinmax": {
         "label": "SkinMax",
@@ -76,6 +84,8 @@ MAXX_GUIDELINES = {
         },
         "protocols": SKINMAX_PROTOCOLS,
         "concern_mapping": SKIN_TYPE_TO_CONCERN,
+        "concern_question": "What's your ONE main skin concern? Pick one: Acne, Pigmentation, Texture, Redness, or Aging.",
+        "concerns": SKINMAX_CONCERNS,
         "recurring": True,
         "daily_tasks": True,
         "weekly_tasks": True,

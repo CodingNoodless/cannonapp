@@ -46,6 +46,9 @@ def _serialize(m: Maxx) -> dict:
         "icon": m.icon,
         "color": m.color,
         "modules": m.modules or [],
+        "protocols": m.protocols or {},
+        "concerns": m.concerns or [],
+        "concern_question": m.concern_question,
         "is_active": m.is_active,
         "created_at": m.created_at,
     }

@@ -36,6 +36,20 @@ class Maxx(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Schedule guidelines (for maxxes with AI-generated schedules)
+    # protocols: { concern_id: { label, am, pm, weekly, sunscreen, ... } } - structure varies by maxx
+    protocols = Column(JSON, default=dict)
+    # schedule_rules: { am_timing, pm_timing, sunscreen_reapply, ... }
+    schedule_rules = Column(JSON, default=dict)
+    # concern_mapping: { skin_type: concern_id } - optional fallback when user hasn't picked
+    concern_mapping = Column(JSON, default=dict)
+    # concern_question: "What's your ONE main skin concern? Pick one: Acne, Pigmentation, ..."
+    concern_question = Column(Text)
+    # concerns: [{ id, label }] - options to show when asking user
+    concerns = Column(JSON, default=list)
+    # protocol_prompt_template: template for building prompt section, uses {label}, {am}, {pm}, etc.
+    protocol_prompt_template = Column(Text)
+
     __table_args__ = (
         Index("idx_maxes_active", is_active),
     )

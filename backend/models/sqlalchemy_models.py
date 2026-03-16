@@ -54,10 +54,60 @@ class User(Base):
     schedule_preferences = Column(JSON, default=dict)
     last_progress_prompt_date = Column(String)
 
+    # AI memory — persistent context the LLM can reference across conversations
+    ai_context = Column(Text, default="")
+    # Rolling summaries — last 3 conversation summaries for drift detection
+    ai_summaries = Column(JSON, default=list)
+
     __table_args__ = (
         Index("idx_app_users_email", email),
         Index("idx_app_users_username", username),
         Index("idx_app_users_is_paid", is_paid),
+    )
+
+
+class UserCoachingState(Base):
+    """Structured coaching state per user — queryable fields for rules engine"""
+    __tablename__ = "user_coaching_state"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False, unique=True)
+
+    # Physical
+    weight = Column(Float)
+    height = Column(Float)
+    body_fat_estimate = Column(Float)
+
+    # Goals & equipment
+    primary_goal = Column(String)  # e.g. "jawline", "clear_skin", "physique"
+    equipment = Column(JSON, default=list)  # ["mastic_gum", "derma_roller", ...]
+
+    # Tracking
+    streak_days = Column(Integer, default=0)
+    missed_days = Column(Integer, default=0)
+    total_check_ins = Column(Integer, default=0)
+    last_check_in = Column(DateTime(timezone=True))
+    last_workout = Column(DateTime(timezone=True))
+
+    # Injuries / blockers
+    injuries = Column(JSON, default=list)  # [{"area": "jaw", "note": "TMJ pain", "date": "..."}]
+
+    # Tone / style (AI-detected over time)
+    preferred_tone = Column(String, default="direct")  # direct, aggressive, chill
+    responsiveness = Column(String, default="normal")  # normal, low, high
+
+    # Check-in data (latest)
+    last_sleep_hours = Column(Float)
+    last_calories = Column(Integer)
+    last_mood = Column(String)  # 1-10 or text
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_coaching_state_user_id", user_id),
+        Index("idx_coaching_state_missed_days", missed_days),
+        Index("idx_coaching_state_streak", streak_days),
     )
 
 

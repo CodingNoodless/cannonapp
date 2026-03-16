@@ -7,7 +7,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import HomeScreen from '../screens/home/HomeScreen';
-import CannonChatScreen from '../screens/chat/CannonChatScreen';
+import MaxChatScreen from '../screens/chat/MaxChatScreen';
 import ForumsScreen from '../screens/forums/ForumsScreen';
 import ChannelChatScreen from '../screens/forums/ChannelChatScreen';
 
@@ -51,7 +51,7 @@ export default function TabNavigator() {
             />
             <Tab.Screen
                 name="Chat"
-                component={CannonChatScreen}
+                component={MaxChatScreen}
                 options={{
                     tabBarLabel: () => null,
                     tabBarIcon: () => (

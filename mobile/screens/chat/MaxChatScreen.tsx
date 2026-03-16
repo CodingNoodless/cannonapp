@@ -8,7 +8,7 @@ import { colors, spacing, borderRadius, typography, shadows } from '../../theme/
 
 interface Message { role: 'user' | 'assistant'; content: string; attachment_url?: string; attachment_type?: string; }
 
-export default function CannonChatScreen() {
+export default function MaxChatScreen() {
     const route = useRoute<any>();
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');

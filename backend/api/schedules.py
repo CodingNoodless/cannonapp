@@ -49,6 +49,7 @@ async def generate_maxx_schedule(
     data: GenerateMaxxScheduleRequest,
     current_user: dict = Depends(require_paid_user),
     db: AsyncSession = Depends(get_db),
+    rds_db: AsyncSession = Depends(get_rds_db),
 ):
     """Generate a personalised AI schedule for a maxx module (e.g. SkinMax)"""
     try:
@@ -56,6 +57,7 @@ async def generate_maxx_schedule(
             user_id=current_user["id"],
             maxx_id=data.maxx_id,
             db=db,
+            rds_db=rds_db,
             wake_time=data.wake_time,
             sleep_time=data.sleep_time,
             skin_concern=data.skin_concern,

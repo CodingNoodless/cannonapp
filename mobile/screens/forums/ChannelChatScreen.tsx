@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image, NativeSyntheticEvent, TextInputKeyPressEventData } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,6 +45,7 @@ export default function ChannelChatScreen() {
     const [channelCategory, setChannelCategory] = useState<string | null>(null);
     const [channelTags, setChannelTags] = useState<string[]>([]);
     const flatListRef = useRef<FlatList>(null);
+    const isAtBottomRef = useRef(true);
     const isAdmin = user?.is_admin || false;
     const currentUserId = user?.id;
     const canPostTopLevel = !isAdminOnly || isAdmin;
@@ -53,6 +54,11 @@ export default function ChannelChatScreen() {
     const LEGACY_UPVOTE = 'â¬†ï¸';
     const LEGACY_DOWNVOTE = 'â¬‡ï¸';
     const [pendingReactions, setPendingReactions] = useState<Record<string, boolean>>({});
+    const [threadSort, setThreadSort] = useState<'top' | 'new'>('top');
+    const [threadsOnly, setThreadsOnly] = useState(false);
+    const [mediaOnly, setMediaOnly] = useState(false);
+    const [expandedThreads, setExpandedThreads] = useState<Record<string, boolean>>({});
+    const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
     useFocusEffect(useCallback(() => {
         loadMessages();
@@ -77,6 +83,12 @@ export default function ChannelChatScreen() {
     const formatTime = (dateString: string) => {
         const dt = new Date(parseTimestamp(dateString));
         return dt.toLocaleString();
+    };
+
+    const scoreForMessage = (message: Message) => {
+        const upvotes = (message.reactions?.[UPVOTE] || message.reactions?.[LEGACY_UPVOTE] || []).length;
+        const downvotes = (message.reactions?.[DOWNVOTE] || message.reactions?.[LEGACY_DOWNVOTE] || []).length;
+        return upvotes - downvotes;
     };
 
     const loadMessages = async () => {
@@ -202,8 +214,86 @@ export default function ChannelChatScreen() {
         return message.user_email.split('@')[0];
     };
 
+    const repliesByParent = useMemo(() => {
+        const map: Record<string, Message[]> = {};
+        messages.forEach((message) => {
+            if (!message.parent_id) return;
+            if (!map[message.parent_id]) map[message.parent_id] = [];
+            map[message.parent_id].push(message);
+        });
+        Object.values(map).forEach((list) => {
+            list.sort((a, b) => {
+                const at = parseTimestamp(a.created_at);
+                const bt = parseTimestamp(b.created_at);
+                if (at !== bt) return at - bt;
+                return a.id.localeCompare(b.id);
+            });
+        });
+        return map;
+    }, [messages]);
+
+    const rootMessages = useMemo(() => messages.filter((m) => !m.parent_id), [messages]);
+
+    const sortRoots = useCallback((list: Message[]) => {
+        const sorted = list.slice().sort((a, b) => {
+            if (threadSort === 'top') {
+                const aScore = scoreForMessage(a);
+                const bScore = scoreForMessage(b);
+                if (aScore !== bScore) return bScore - aScore;
+            }
+            const at = parseTimestamp(a.created_at);
+            const bt = parseTimestamp(b.created_at);
+            if (at !== bt) return bt - at;
+            return b.id.localeCompare(a.id);
+        });
+        return sorted;
+    }, [threadSort]);
+
+    const isMediaMessage = (message: Message) => !!message.attachment_url;
+
+    const displayMessages = useMemo(() => {
+        const sortedRoots = sortRoots(rootMessages);
+        const result: Message[] = [];
+
+        const isMediaThread = (root: Message) => {
+            if (isMediaMessage(root)) return true;
+            const replies = repliesByParent[root.id] || [];
+            return replies.some(isMediaMessage);
+        };
+
+        sortedRoots.forEach((root) => {
+            const replies = repliesByParent[root.id] || [];
+            if (threadsOnly) {
+                if (!mediaOnly || isMediaThread(root)) {
+                    result.push(root);
+                }
+                if (expandedThreads[root.id]) {
+                    if (mediaOnly) {
+                        result.push(...replies.filter(isMediaMessage));
+                    } else {
+                        result.push(...replies);
+                    }
+                }
+                return;
+            }
+
+            result.push(root);
+            if (mediaOnly) {
+                result.push(...replies.filter(isMediaMessage));
+            } else {
+                result.push(...replies);
+            }
+        });
+
+        if (mediaOnly && !threadsOnly) {
+            return result.filter(isMediaMessage);
+        }
+
+        return result;
+    }, [rootMessages, repliesByParent, expandedThreads, mediaOnly, threadsOnly, sortRoots]);
+
     const scrollToMessage = (messageId: string) => {
-        const index = messages.findIndex((m) => m.id === messageId);
+        const index = displayMessages.findIndex((m) => m.id === messageId);
         if (index === -1) return;
         setHighlightedId(messageId);
         flatListRef.current?.scrollToIndex({ index, animated: true });
@@ -215,9 +305,9 @@ export default function ChannelChatScreen() {
         const repliedMessage = item.parent_id ? messages.find(m => m.id === item.parent_id) : null;
         const isHighlighted = highlightedId === item.id;
         const isReply = !!item.parent_id;
-        const upvotes = (item.reactions?.[UPVOTE] || item.reactions?.[LEGACY_UPVOTE] || []).length;
-        const downvotes = (item.reactions?.[DOWNVOTE] || item.reactions?.[LEGACY_DOWNVOTE] || []).length;
-        const score = upvotes - downvotes;
+        const score = scoreForMessage(item);
+        const replyCount = !isReply ? (repliesByParent[item.id]?.length || 0) : 0;
+        const isExpanded = !!expandedThreads[item.id];
 
         return (
             <View style={[styles.messageRow, isReply && styles.replyRow, isHighlighted && styles.messageHighlight]}>
@@ -241,6 +331,12 @@ export default function ChannelChatScreen() {
                         <View style={styles.votePill}>
                             <Text style={styles.voteScore}>{score}</Text>
                         </View>
+                        {!isReply && replyCount > 0 && (
+                            <View style={styles.replyCountPill}>
+                                <Ionicons name="chatbubble-ellipses" size={12} color={colors.textMuted} />
+                                <Text style={styles.replyCountText}>{replyCount} replies</Text>
+                            </View>
+                        )}
                     </View>
                     {repliedMessage && (
                         <TouchableOpacity
@@ -262,6 +358,16 @@ export default function ChannelChatScreen() {
                         )}
                     </View>
                     {renderReactions(item)}
+                    {!isReply && replyCount > 0 && threadsOnly && (
+                        <TouchableOpacity
+                            onPress={() => setExpandedThreads((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
+                            style={styles.replyToggle}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+                            <Text style={styles.replyToggleText}>{isExpanded ? 'Hide replies' : `View replies (${replyCount})`}</Text>
+                        </TouchableOpacity>
+                    )}
                     <View style={styles.messageActions}>
                         <TouchableOpacity onPress={() => handleToggleReaction(item.id, UPVOTE)} style={styles.actionBtn} activeOpacity={0.6}>
                             <Ionicons name="arrow-up" size={14} color={colors.textMuted} />
@@ -285,10 +391,13 @@ export default function ChannelChatScreen() {
 
     const renderReactions = (message: Message) => {
         if (!message.reactions || Object.keys(message.reactions).length === 0) return null;
-        const entries = Object.entries(message.reactions).map(([emoji, userIds]) => {
-            const normalizedEmoji = emoji === LEGACY_UPVOTE ? UPVOTE : emoji === LEGACY_DOWNVOTE ? DOWNVOTE : emoji;
-            return [normalizedEmoji, userIds] as [string, string[]];
-        });
+        const entries = Object.entries(message.reactions)
+            .map(([emoji, userIds]) => {
+                const normalizedEmoji = emoji === LEGACY_UPVOTE ? UPVOTE : emoji === LEGACY_DOWNVOTE ? DOWNVOTE : emoji;
+                return [normalizedEmoji, userIds] as [string, string[]];
+            })
+            .filter(([emoji]) => emoji !== UPVOTE && emoji !== DOWNVOTE);
+        if (entries.length === 0) return null;
         return (
             <View style={styles.reactionsRow}>
                 {entries.map(([emoji, userIds]) => {
@@ -338,11 +447,30 @@ export default function ChannelChatScreen() {
                     )}
                 </View>
 
-                <FlatList ref={flatListRef} data={messages} renderItem={renderMessage} keyExtractor={(item) => item.id} contentContainerStyle={[styles.messagesList, { paddingBottom: insets.bottom + 24 }]} style={styles.messagesListContainer} onContentSizeChange={() => { if (!isSearching) flatListRef.current?.scrollToEnd({ animated: false }); }} onScrollToIndexFailed={(info) => { setTimeout(() => { flatListRef.current?.scrollToIndex({ index: info.index, animated: true }); }, 250); }} showsVerticalScrollIndicator={false}
+                <FlatList
+                    ref={flatListRef}
+                    data={displayMessages}
+                    renderItem={renderMessage}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={[styles.messagesList, { paddingBottom: insets.bottom + 24 }]}
+                    style={styles.messagesListContainer}
+                    onContentSizeChange={() => {
+                        if (!isSearching && isAtBottomRef.current) {
+                            flatListRef.current?.scrollToEnd({ animated: false });
+                        }
+                    }}
+                    onScroll={({ nativeEvent }) => {
+                        const paddingToBottom = 120;
+                        const isNearBottom = nativeEvent.layoutMeasurement.height + nativeEvent.contentOffset.y >= nativeEvent.contentSize.height - paddingToBottom;
+                        isAtBottomRef.current = isNearBottom;
+                        setShowJumpToLatest(!isNearBottom && !isSearching);
+                    }}
+                    onScrollToIndexFailed={(info) => { setTimeout(() => { flatListRef.current?.scrollToIndex({ index: info.index, animated: true }); }, 250); }}
+                    showsVerticalScrollIndicator={false}
                     ListHeaderComponent={
                         !isSearching ? (
                             <View style={styles.threadHeader}>
-                                <Text style={styles.breadcrumb}>Community · {channelCategory || 'general'}</Text>
+                                <Text style={styles.breadcrumb}>Community - {channelCategory || 'general'}</Text>
                                 <Text style={styles.threadTitle}>{channelName}</Text>
                                 {!!channelDescription && <Text style={styles.threadSubtitle}>{channelDescription}</Text>}
                                 {!!channelTags.length && (
@@ -352,6 +480,40 @@ export default function ChannelChatScreen() {
                                         ))}
                                     </View>
                                 )}
+                                <View style={styles.threadMetaRow}>
+                                    <Text style={styles.threadMetaText}>{rootMessages.length} threads</Text>
+                                    <Text style={styles.threadMetaText}>{messages.length} posts</Text>
+                                </View>
+                                <View style={styles.threadControls}>
+                                    <View style={styles.controlGroup}>
+                                        <TouchableOpacity
+                                            style={[styles.controlBtn, threadSort === 'top' && styles.controlBtnActive]}
+                                            onPress={() => setThreadSort('top')}
+                                        >
+                                            <Text style={[styles.controlText, threadSort === 'top' && styles.controlTextActive]}>Top</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.controlBtn, threadSort === 'new' && styles.controlBtnActive]}
+                                            onPress={() => setThreadSort('new')}
+                                        >
+                                            <Text style={[styles.controlText, threadSort === 'new' && styles.controlTextActive]}>New</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={styles.controlGroup}>
+                                        <TouchableOpacity
+                                            style={[styles.controlBtn, threadsOnly && styles.controlBtnActive]}
+                                            onPress={() => setThreadsOnly((prev) => !prev)}
+                                        >
+                                            <Text style={[styles.controlText, threadsOnly && styles.controlTextActive]}>Threads</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.controlBtn, mediaOnly && styles.controlBtnActive]}
+                                            onPress={() => setMediaOnly((prev) => !prev)}
+                                        >
+                                            <Text style={[styles.controlText, mediaOnly && styles.controlTextActive]}>Media</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
                             </View>
                         ) : null
                     }
@@ -368,6 +530,18 @@ export default function ChannelChatScreen() {
                         )}
                     </View>
                 } />
+
+                {showJumpToLatest && (
+                    <TouchableOpacity
+                        style={styles.jumpToLatest}
+                        onPress={() => flatListRef.current?.scrollToEnd({ animated: true })}
+                        activeOpacity={0.8}
+                    >
+                        <Ionicons name="arrow-down" size={18} color={colors.buttonText} />
+                        <Text style={styles.jumpToLatestText}>Jump to latest</Text>
+                    </TouchableOpacity>
+                )}
+
 
                 {isAdminOnly && !isAdmin && !replyingTo && !isSearching && (
                     <View style={styles.restrictedInfo}><Ionicons name="information-circle" size={18} color={colors.textMuted} /><Text style={styles.restrictedInfoText}>Only admins can post announcements. Reply to comment.</Text></View>
@@ -493,6 +667,20 @@ const styles = StyleSheet.create({
     welcomeTitle: { fontSize: 20, fontWeight: '700', color: colors.foreground, textAlign: 'center', marginBottom: spacing.sm },
     welcomeSubtitle: { fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
     threadHeader: { backgroundColor: colors.card, padding: spacing.lg, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.lg },
+    threadMetaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
+    threadMetaText: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
+    threadControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md, gap: spacing.md },
+    controlGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+    controlBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+    controlBtnActive: { backgroundColor: colors.foreground, borderColor: colors.foreground },
+    controlText: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
+    controlTextActive: { color: colors.buttonText },
+    replyCountPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.surface, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: colors.border },
+    replyCountText: { fontSize: 11, color: colors.textSecondary, fontWeight: '600' },
+    replyToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
+    replyToggleText: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+    jumpToLatest: { position: 'absolute', right: spacing.lg, bottom: 140, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.foreground, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, ...shadows.md },
+    jumpToLatestText: { color: colors.buttonText, fontSize: 12, fontWeight: '700' },
     breadcrumb: { fontSize: 11, color: colors.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' },
     threadTitle: { fontSize: 20, fontWeight: '700', color: colors.foreground, marginTop: 6 },
     threadSubtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 6, lineHeight: 18 },

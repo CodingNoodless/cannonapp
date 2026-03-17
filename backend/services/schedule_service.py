@@ -233,13 +233,19 @@ class ScheduleService:
         )
 
         try:
+            import asyncio
             import google.generativeai as genai
             model = genai.GenerativeModel(settings.gemini_model)
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(response_mime_type="application/json"),
+            gen_config = genai.GenerationConfig(response_mime_type="application/json")
+            loop = asyncio.get_event_loop()
+            response = await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: model.generate_content(prompt, generation_config=gen_config)),
+                timeout=45,
             )
             schedule_data = json.loads(response.text)
+        except asyncio.TimeoutError:
+            logger.error("Gemini schedule generation timed out — using fallback")
+            schedule_data = self._generate_fallback_schedule(module, num_days, wake_time)
         except Exception as e:
             logger.error(f"Gemini schedule generation failed: {e}")
             schedule_data = self._generate_fallback_schedule(module, num_days, wake_time)
@@ -336,13 +342,19 @@ class ScheduleService:
         )
 
         try:
+            import asyncio
             import google.generativeai as genai
             model = genai.GenerativeModel(settings.gemini_model)
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(response_mime_type="application/json"),
+            gen_config = genai.GenerationConfig(response_mime_type="application/json")
+            loop = asyncio.get_event_loop()
+            response = await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: model.generate_content(prompt, generation_config=gen_config)),
+                timeout=45,
             )
             schedule_data = json.loads(response.text)
+        except asyncio.TimeoutError:
+            logger.error("Gemini maxx schedule generation timed out — using fallback")
+            schedule_data = self._generate_maxx_fallback(maxx_id, num_days, wake_time, sleep_time)
         except Exception as e:
             logger.error(f"Gemini maxx schedule generation failed: {e}")
             schedule_data = self._generate_maxx_fallback(maxx_id, num_days, wake_time, sleep_time)
@@ -393,7 +405,7 @@ class ScheduleService:
             schedule_context={
                 "skin_concern": concern,
                 "skin_type": skin_type,
-                "outside_today": outside_today,
+                "outside_today": "true" if outside_today else "false",
                 "outside_today_date": start_date_iso,
                 "wake_time": wake_time,
                 "sleep_time": sleep_time,
@@ -554,13 +566,20 @@ class ScheduleService:
         )
 
         try:
+            import asyncio
             import google.generativeai as genai
             model = genai.GenerativeModel(settings.gemini_model)
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(response_mime_type="application/json"),
+            gen_config = genai.GenerationConfig(response_mime_type="application/json")
+            loop = asyncio.get_event_loop()
+            adapted = json.loads(
+                (await asyncio.wait_for(
+                    loop.run_in_executor(None, lambda: model.generate_content(prompt, generation_config=gen_config)),
+                    timeout=45,
+                )).text
             )
-            adapted = json.loads(response.text)
+        except asyncio.TimeoutError:
+            logger.error("Schedule adaptation timed out")
+            raise ValueError("Schedule adaptation timed out")
         except Exception as e:
             logger.error(f"Schedule adaptation failed: {e}")
             raise ValueError(f"Failed to adapt schedule: {e}")

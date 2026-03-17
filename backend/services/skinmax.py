@@ -76,16 +76,18 @@ def add_minutes(time_str: str, minutes: int) -> str:
 
 
 def get_concern_key(text: str) -> Optional[str]:
-    s = (text or "").lower()
-    if "acne" in s or "congestion" in s:
+    s = (text or "").lower().strip()
+    if s in ("acne", "pigmentation", "texture", "redness", "aging"):
+        return s
+    if any(w in s for w in ("acne", "breakout", "pimple", "oily", "congestion", "clogged", "zit", "whitehead", "blackhead")):
         return "acne"
-    if "pigment" in s or "uneven" in s or "tone" in s or "dark spot" in s:
+    if any(w in s for w in ("pigment", "uneven", "tone", "dark spot", "hyperpigment", "discolor", "melasma", "sun spot")):
         return "pigmentation"
-    if "texture" in s or "scar" in s:
+    if any(w in s for w in ("texture", "scar", "rough", "bumpy", "uneven texture", "pock", "ice pick")):
         return "texture"
-    if "red" in s or "sensitive" in s:
+    if any(w in s for w in ("red", "sensitive", "irritat", "rosacea", "flush", "reactive")):
         return "redness"
-    if "aging" in s or "age" in s or "quality" in s:
+    if any(w in s for w in ("aging", "age", "quality", "wrinkle", "fine line", "dull", "anti-aging", "sagging")):
         return "aging"
     if s.strip() in {"1", "2", "3", "4", "5"}:
         return {"1": "acne", "2": "pigmentation", "3": "texture", "4": "redness", "5": "aging"}[s.strip()]

@@ -6,10 +6,11 @@ import * as ImagePicker from 'expo-image-picker';
 import api from '../../services/api';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme/dark';
 
-interface Message { role: 'user' | 'assistant'; content: string; attachment_url?: string; attachment_type?: string; }
+interface Message { role: 'user' | 'assistant'; content: string; attachment_url?: string; attachment_type?: string; isTyping?: boolean; }
 
 export default function MaxChatScreen() {
     const route = useRoute<any>();
+    const initSchedule = route.params?.initSchedule;
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -18,20 +19,19 @@ export default function MaxChatScreen() {
     const flatListRef = useRef<FlatList>(null);
     const initScheduleHandled = useRef(false);
 
-    useEffect(() => { loadHistory(); }, []);
+    const showTyping = () => setMessages(prev => [...prev.filter(m => !m.isTyping), { role: 'assistant', content: '', isTyping: true }]);
+    const hideTyping = () => setMessages(prev => prev.filter(m => !m.isTyping));
 
     useEffect(() => {
-        const initSchedule = route.params?.initSchedule;
-        if (!initSchedule) return;
-        if (initScheduleHandled.current === initSchedule) return;
-        if (loading) return;
-        initScheduleHandled.current = initSchedule;
-        const maxxLabel = initSchedule.charAt(0).toUpperCase() + initSchedule.slice(1).replace('max', 'Max');
-        sendMessageWithContext(
-            `I want to start my ${maxxLabel} schedule.`,
-            initSchedule,
-        );
-    }, [route.params?.initSchedule, loading]);
+        if (initSchedule) {
+            // If starting a schedule, send the init message first, then loadHistory will run on complete
+            initScheduleHandled.current = initSchedule;
+            const maxxLabel = initSchedule.charAt(0).toUpperCase() + initSchedule.slice(1).replace('max', 'Max');
+            sendMessageWithContext(`I want to start my ${maxxLabel} schedule.`, initSchedule);
+        } else {
+            loadHistory();
+        }
+    }, []);
 
     const loadHistory = async () => { try { const { messages: history } = await api.getChatHistory(); setMessages(history || []); } catch (e) { console.error(e); } };
 
@@ -43,13 +43,15 @@ export default function MaxChatScreen() {
     const sendMessageWithContext = async (msg: string, initContext?: string) => {
         if (!msg.trim() || loading) return;
         setLoading(true);
-        setMessages(prev => [...prev, { role: 'user', content: msg }]);
+        showTyping();
         try {
-            const { response } = await api.sendChatMessage(msg, undefined, undefined, initContext);
-            setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+            await api.sendChatMessage(msg, undefined, undefined, initContext);
+            hideTyping();
+            await loadHistory();
         } catch (e: any) {
             console.error('sendMessageWithContext error:', e?.response?.data || e?.message || e);
-            setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Try sending your message again.' }]);
+            hideTyping();
+            setMessages(prev => [...prev, { role: 'assistant', content: 'sorry, something went wrong. try again.' }]);
         } finally {
             setLoading(false);
         }
@@ -59,7 +61,10 @@ export default function MaxChatScreen() {
         if ((!input.trim() && !selectedImage) || loading) return;
         const userContent = input.trim();
         let attachmentUrl: string | undefined; let attachmentType: string | undefined;
-        setLoading(true); setInput('');
+        setLoading(true); setInput(''); setSelectedImage(null);
+        // Optimistic: show user message immediately
+        setMessages(prev => [...prev, { role: 'user', content: userContent }]);
+        showTyping();
         try {
             if (selectedImage) {
                 setUploading(true);
@@ -70,24 +75,49 @@ export default function MaxChatScreen() {
                 const uploadRes = await api.uploadChatFile(formData);
                 attachmentUrl = uploadRes.url; attachmentType = 'image'; setUploading(false);
             }
-            setMessages(prev => [...prev, { role: 'user', content: userContent, attachment_url: attachmentUrl, attachment_type: attachmentType }]);
-            setSelectedImage(null);
-            const { response } = await api.sendChatMessage(userContent, attachmentUrl, attachmentType);
-            setMessages(prev => [...prev, { role: 'assistant', content: response }]);
-        } catch (e) { console.error(e); setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, something went wrong.' }]); }
-        finally { setLoading(false); setUploading(false); }
+            await api.sendChatMessage(userContent, attachmentUrl, attachmentType, initSchedule);
+            hideTyping();
+            await loadHistory();
+        } catch (e) {
+            console.error(e);
+            hideTyping();
+            setMessages(prev => [...prev, { role: 'assistant', content: 'sorry, something went wrong.' }]);
+        } finally { setLoading(false); setUploading(false); }
     };
 
-    const renderMessage = ({ item }: { item: Message }) => (
-        <View style={[styles.messageRow, item.role === 'user' && styles.userMessageRow]}>
-            <View style={[styles.bubble, item.role === 'user' ? styles.userBubble : styles.assistantBubble]}>
-                {item.content ? <Text style={[styles.messageText, item.role === 'user' && styles.userMessageText]}>{item.content}</Text> : null}
-                {item.attachment_url && item.attachment_type === 'image' && (
-                    <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />
-                )}
+    const TypingDots = () => {
+        const [dots, setDots] = React.useState('');
+        React.useEffect(() => {
+            const id = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 400);
+            return () => clearInterval(id);
+        }, []);
+        return <Text style={styles.typingText}>typing{dots}</Text>;
+    };
+
+    const renderMessage = ({ item }: { item: Message }) => {
+        const hasContent = item.content?.trim();
+        const hasImage = item.attachment_url && item.attachment_type === 'image';
+        if (item.isTyping) {
+            return (
+                <View style={[styles.messageRow]}>
+                    <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
+                        <TypingDots />
+                    </View>
+                </View>
+            );
+        }
+        if (!hasContent && !hasImage) return null;
+        return (
+            <View style={[styles.messageRow, item.role === 'user' && styles.userMessageRow]}>
+                <View style={[styles.bubble, item.role === 'user' ? styles.userBubble : styles.assistantBubble]}>
+                    {hasContent ? <Text style={[styles.messageText, item.role === 'user' && styles.userMessageText]}>{item.content}</Text> : null}
+                    {hasImage && (
+                        <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />
+                    )}
+                </View>
             </View>
-        </View>
-    );
+        );
+    };
 
     const ListEmpty = () => (
         <View style={styles.emptyState}>
@@ -113,7 +143,7 @@ export default function MaxChatScreen() {
                     ref={flatListRef}
                     data={messages}
                     renderItem={renderMessage}
-                    keyExtractor={(_, i) => i.toString()}
+                    keyExtractor={(item, i) => item.isTyping ? 'typing' : i.toString()}
                     contentContainerStyle={[styles.messageList, messages.length === 0 && styles.messageListEmpty]}
                     onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
                     showsVerticalScrollIndicator={false}
@@ -202,6 +232,8 @@ const styles = StyleSheet.create({
     },
     messageText: { fontSize: 15, lineHeight: 22, color: colors.foreground },
     userMessageText: { color: colors.buttonText },
+    typingBubble: { paddingVertical: 10, paddingHorizontal: 16 },
+    typingText: { fontSize: 14, color: colors.textMuted, fontStyle: 'italic' },
     attachmentImage: { width: 220, height: 160, borderRadius: 12, marginTop: spacing.sm },
     emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
     emptyTitle: { fontSize: 18, fontWeight: '600', color: colors.foreground, marginBottom: 8 },

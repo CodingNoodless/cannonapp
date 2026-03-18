@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme/dark';
 
-const SCHEDULE_CAPABLE_MAXXES = ['skinmax', 'hairmax', 'fitmax'];
+const SCHEDULE_CAPABLE_MAXXES = ['skinmax', 'hairmax'];
 
 export default function MaxxDetailScreen() {
     const navigation = useNavigation<any>();
@@ -17,6 +17,7 @@ export default function MaxxDetailScreen() {
     const [activeSchedule, setActiveSchedule] = useState<any>(null);
     const [scheduleLoading, setScheduleLoading] = useState(false);
 
+    const isFitmax = maxxId === 'fitmax';
     const canSchedule = SCHEDULE_CAPABLE_MAXXES.includes(maxxId);
 
     useEffect(() => { loadData(); }, [maxxId]);
@@ -73,6 +74,19 @@ export default function MaxxDetailScreen() {
 
             <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <Text style={styles.description}>{maxx.description}</Text>
+
+                {isFitmax && (
+                    <View style={styles.scheduleActions}>
+                        <TouchableOpacity
+                            style={styles.scheduleButton}
+                            activeOpacity={0.7}
+                            onPress={() => (navigation as any).navigate('FitmaxDashboard')}
+                        >
+                            <Ionicons name="barbell-outline" size={20} color={colors.buttonText} />
+                            <Text style={styles.scheduleButtonText}>Open Fitmax Dashboard</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
 
                 {canSchedule && (
                     <View style={styles.scheduleActions}>

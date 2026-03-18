@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import api from '../../services/api';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme/dark';
 
-interface Message { role: 'user' | 'assistant'; content: string; attachment_url?: string; attachment_type?: string; }
+interface Message { role: 'user' | 'assistant' | 'coach'; content: string; attachment_url?: string; attachment_type?: string; }
 
 export default function MaxChatScreen() {
     const route = useRoute<any>();
@@ -78,16 +78,21 @@ export default function MaxChatScreen() {
         finally { setLoading(false); setUploading(false); }
     };
 
-    const renderMessage = ({ item }: { item: Message }) => (
-        <View style={[styles.messageRow, item.role === 'user' && styles.userMessageRow]}>
-            <View style={[styles.bubble, item.role === 'user' ? styles.userBubble : styles.assistantBubble]}>
-                {item.content ? <Text style={[styles.messageText, item.role === 'user' && styles.userMessageText]}>{item.content}</Text> : null}
-                {item.attachment_url && item.attachment_type === 'image' && (
-                    <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />
-                )}
+    const renderMessage = ({ item }: { item: Message }) => {
+        const isUser = item.role === 'user';
+        const isCoach = item.role === 'coach';
+        return (
+            <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
+                <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble, isCoach && styles.coachBubble]}>
+                    {isCoach ? <Text style={styles.coachLabel}>from your coach</Text> : null}
+                    {item.content ? <Text style={[styles.messageText, isUser && styles.userMessageText]}>{item.content}</Text> : null}
+                    {item.attachment_url && item.attachment_type === 'image' && (
+                        <Image source={{ uri: api.resolveAttachmentUrl(item.attachment_url) }} style={styles.attachmentImage} resizeMode="cover" />
+                    )}
+                </View>
             </View>
-        </View>
-    );
+        );
+    };
 
     const ListEmpty = () => (
         <View style={styles.emptyState}>
@@ -199,6 +204,16 @@ const styles = StyleSheet.create({
         borderBottomLeftRadius: 6,
         borderWidth: 1,
         borderColor: colors.border,
+    },
+    coachBubble: {
+        borderColor: colors.foreground,
+    },
+    coachLabel: {
+        fontSize: 11,
+        color: colors.textMuted,
+        marginBottom: 6,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
     messageText: { fontSize: 15, lineHeight: 22, color: colors.foreground },
     userMessageText: { color: colors.buttonText },

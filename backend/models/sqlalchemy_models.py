@@ -276,3 +276,136 @@ class UserSchedule(Base):
         Index("idx_user_schedules_active", is_active),
         Index("idx_user_schedules_maxx_id", maxx_id),
     )
+
+
+class FitmaxProfile(Base):
+    """Single source-of-truth fitness profile for Fitmax."""
+    __tablename__ = "fitmax_profiles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False, unique=True)
+
+    goal_type = Column(String, nullable=False)
+    biological_sex = Column(String, nullable=False)
+    age = Column(Integer, nullable=False)
+    height_cm = Column(Float, nullable=False)
+    weight_kg = Column(Float, nullable=False)
+    body_fat_percent = Column(Float)
+
+    training_access = Column(JSON, default=list)
+    weekly_training_days = Column(Integer, default=3)
+    preferred_session_length = Column(Integer, default=45)
+    preferred_time_of_day = Column(String, default="evening")
+    activity_level = Column(String, default="moderately_active")
+
+    dietary_restrictions = Column(JSON, default=list)
+    calorie_tracking = Column(String, default="no")
+    eating_goal = Column(String, default="unsure")
+
+    wake_time = Column(String)
+    sleep_time = Column(String)
+    timezone = Column(String, default="UTC")
+    quiet_hours_start = Column(String)
+    quiet_hours_end = Column(String)
+
+    # Cached outputs from the calculator and rules engine
+    targets = Column(JSON, default=dict)
+    plan_meta = Column(JSON, default=dict)
+    onboarding_state = Column(JSON, default=dict)
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_fitmax_profiles_user_id", user_id),
+        Index("idx_fitmax_profiles_goal_type", goal_type),
+    )
+
+
+class FitmaxWorkoutLog(Base):
+    """Logged workout sessions for Fitmax."""
+    __tablename__ = "fitmax_workout_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    week_number = Column(Integer, default=1)
+    day_label = Column(String, nullable=False)
+    focus = Column(String)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=False)
+    duration_minutes = Column(Integer, default=0)
+    feeling_score = Column(Integer)
+    total_volume_kg = Column(Float, default=0.0)
+    notes = Column(Text)
+    sets = Column(JSON, default=list)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_fitmax_workout_logs_user_id", user_id),
+        Index("idx_fitmax_workout_logs_week", week_number),
+        Index("idx_fitmax_workout_logs_created", created_at.desc()),
+    )
+
+
+class FitmaxNutritionLog(Base):
+    """Food logs for calorie and macro tracking."""
+    __tablename__ = "fitmax_nutrition_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    meal_name = Column(String, nullable=False)
+    meal_type = Column(String, nullable=False)
+    calories = Column(Integer, default=0)
+    protein_g = Column(Integer, default=0)
+    carbs_g = Column(Integer, default=0)
+    fats_g = Column(Integer, default=0)
+    food_items = Column(JSON, default=list)
+    logged_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_fitmax_nutrition_logs_user_id", user_id),
+        Index("idx_fitmax_nutrition_logs_logged_at", logged_at.desc()),
+    )
+
+
+class FitmaxMeasurementLog(Base):
+    """Weekly body measurements and weight tracking."""
+    __tablename__ = "fitmax_measurement_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    measured_on = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    weight_kg = Column(Float)
+    neck_cm = Column(Float)
+    chest_cm = Column(Float)
+    waist_cm = Column(Float)
+    hips_cm = Column(Float)
+    arms_cm = Column(Float)
+    thighs_cm = Column(Float)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_fitmax_measurement_logs_user_id", user_id),
+        Index("idx_fitmax_measurement_logs_date", measured_on.desc()),
+    )
+
+
+class FitmaxWeekState(Base):
+    """Weekly state snapshot used by coach prompts and summaries."""
+    __tablename__ = "fitmax_week_states"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    iso_week = Column(String, nullable=False)  # e.g. 2026-W12
+    state = Column(JSON, default=dict)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "iso_week", name="fitmax_week_user_unique"),
+        Index("idx_fitmax_week_states_user_id", user_id),
+        Index("idx_fitmax_week_states_iso_week", iso_week),
+    )

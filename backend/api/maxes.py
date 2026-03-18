@@ -5,9 +5,10 @@ Maxes API - Looksmaxxing programs (fitmax, skinmax, etc.)
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from db import get_rds_db
+from db import get_rds_db, get_db
 from middleware.auth_middleware import require_paid_user
 from models.rds_models import Maxx
+from services.fitmax_service import fitmax_service
 
 router = APIRouter(prefix="/maxes", tags=["Maxes"])
 
@@ -28,6 +29,7 @@ async def get_maxx(
     maxx_id: str,
     current_user: dict = Depends(require_paid_user),
     rds_db: AsyncSession = Depends(get_rds_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Return a single maxx by id (e.g. 'fitmax')"""
     result = await rds_db.execute(select(Maxx).where(Maxx.id == maxx_id))
@@ -35,7 +37,12 @@ async def get_maxx(
     if not maxx:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Maxx not found")
-    return _serialize(maxx)
+    payload = _serialize(maxx)
+    if maxx_id == "fitmax":
+        modules = await fitmax_service.get_personalized_modules(current_user["id"], db)
+        if modules:
+            payload["modules"] = modules
+    return payload
 
 
 def _serialize(m: Maxx) -> dict:

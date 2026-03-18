@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 from db import get_db
 from middleware import get_current_user
 from services.storage_service import storage_service, delete_by_url
+from services.fitmax_service import fitmax_service
 from models.user import (
     UserResponse, OnboardingData, UserProfile, GoalType, ExperienceLevel, AccountUpdateRequest
 )
@@ -73,6 +74,13 @@ async def save_onboarding(
     user.onboarding = onboarding_data
     user.updated_at = datetime.utcnow()
     await db.commit()
+
+    goals = [str(g).lower() for g in onboarding_data.get("goals", [])]
+    if "fitmax" in goals:
+        try:
+            await fitmax_service.seed_welcome_message_if_needed(current_user["id"], db)
+        except Exception:
+            logger.exception("Failed to seed fitmax welcome message")
     
     return {"message": "Onboarding completed", "data": onboarding_data}
 

@@ -493,6 +493,67 @@ class ApiService {
         const response = await this.client.delete(`schedules/${scheduleId}/tasks/${taskId}`);
         return response.data;
     }
+
+    // Fitmax
+    async getFitmaxProfile() {
+        const response = await this.client.get('fitmax/profile');
+        return response.data;
+    }
+
+    async saveFitmaxProfile(data: any) {
+        const response = await this.client.post('fitmax/profile', data);
+        return response.data;
+    }
+
+    async updateFitmaxProfile(data: any) {
+        const response = await this.client.put('fitmax/profile', data);
+        return response.data;
+    }
+
+    async getFitmaxDashboard() {
+        const response = await this.client.get('fitmax/dashboard');
+        return response.data;
+    }
+
+    async getFitmaxCourseModules() {
+        const response = await this.client.get('fitmax/course/modules');
+        return response.data;
+    }
+
+    async getFitmaxWorkoutPlan(week: number = 1) {
+        const response = await this.client.get('fitmax/workout-plan', { params: { week } });
+        return response.data;
+    }
+
+    async logFitmaxWorkout(payload: any) {
+        const response = await this.client.post('fitmax/workout/log', payload);
+        return response.data;
+    }
+
+    async logFitmaxNutrition(payload: any) {
+        const response = await this.client.post('fitmax/nutrition/log', payload);
+        return response.data;
+    }
+
+    async getFitmaxNutritionDay(day?: string) {
+        const response = await this.client.get('fitmax/nutrition/day', { params: { day } });
+        return response.data;
+    }
+
+    async logFitmaxMeasurements(payload: any) {
+        const response = await this.client.post('fitmax/progress/measurements', payload);
+        return response.data;
+    }
+
+    async getFitmaxProgressOverview() {
+        const response = await this.client.get('fitmax/progress/overview');
+        return response.data;
+    }
+
+    async refreshFitmaxCoachSchedule() {
+        const response = await this.client.post('fitmax/coach/refresh-schedule');
+        return response.data;
+    }
 }
 
 export const api = new ApiService();

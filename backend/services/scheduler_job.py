@@ -12,7 +12,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from db.sqlalchemy import AsyncSessionLocal
 from services.twilio_service import twilio_service
-from models.sqlalchemy_models import UserSchedule, User, ChatHistory, UserCoachingState
+from models.sqlalchemy_models import UserSchedule, User, ChatHistory, UserCoachingState, FitmaxProfile
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +102,7 @@ async def send_due_notifications():
 async def send_chat_reminders():
     """Insert Max chat messages for due schedule tasks (in-app reminders)."""
     try:
+        from services.fitmax_service import fitmax_service
         async with AsyncSessionLocal() as db:
             result = await db.execute(
                 select(UserSchedule).where(UserSchedule.is_active == True)
@@ -151,13 +152,18 @@ async def send_chat_reminders():
                             )
 
                             if task_dt <= local_now <= task_dt + timedelta(minutes=10):
+                                role = "assistant"
                                 title = task.get("title", "Task")
-                                desc = task.get("description", "")
-                                msg = f"⏰ **{title}**\n{desc}" if desc else f"⏰ **{title}**"
+                                if schedule.maxx_id == "fitmax" and task.get("fitmax_message_type"):
+                                    msg = await fitmax_service.render_coach_message(str(schedule.user_id), db, task)
+                                    role = "coach"
+                                else:
+                                    desc = task.get("description", "")
+                                    msg = f"⏰ **{title}**\n{desc}" if desc else f"⏰ **{title}**"
 
                                 chat_msg = ChatHistory(
                                     user_id=schedule.user_id,
-                                    role="assistant",
+                                    role=role,
                                     content=msg,
                                     created_at=datetime.utcnow(),
                                 )
@@ -180,6 +186,38 @@ async def send_chat_reminders():
 
     except Exception as e:
         logger.error(f"Chat reminders job error: {e}", exc_info=True)
+
+
+async def refresh_fitmax_daily_schedules():
+    """Regenerate Fitmax rolling schedules daily so coach jobs stay current."""
+    try:
+        from services.fitmax_service import fitmax_service
+        async with AsyncSessionLocal() as db:
+            now_utc = datetime.now(ZoneInfo("UTC"))
+            result = await db.execute(select(FitmaxProfile).where(FitmaxProfile.is_active == True))
+            profiles = result.scalars().all()
+
+            for profile in profiles:
+                user = await db.get(User, profile.user_id)
+                if not user:
+                    continue
+
+                tz_name = profile.timezone or (user.onboarding or {}).get("timezone", "UTC")
+                try:
+                    user_tz = ZoneInfo(tz_name)
+                except Exception:
+                    user_tz = ZoneInfo("UTC")
+
+                local_now = now_utc.astimezone(user_tz)
+                # Refresh during first 15 minutes of local day.
+                if local_now.hour != 0 or local_now.minute > 15:
+                    continue
+
+                await fitmax_service.refresh_fitmax_schedule(str(profile.user_id), db)
+                logger.info("Refreshed Fitmax schedule for user %s", profile.user_id)
+
+    except Exception as e:
+        logger.error(f"Fitmax daily schedule refresh failed: {e}", exc_info=True)
 
 
 async def send_daily_progress_prompts():
@@ -431,6 +469,13 @@ def start_scheduler(app):
             replace_existing=True,
         )
         scheduler.add_job(
+            refresh_fitmax_daily_schedules,
+            "interval",
+            minutes=15,
+            id="fitmax_daily_refresh",
+            replace_existing=True,
+        )
+        scheduler.add_job(
             send_daily_progress_prompts,
             "interval",
             minutes=60,
@@ -452,7 +497,7 @@ def start_scheduler(app):
             replace_existing=True,
         )
         scheduler.start()
-        logger.info("APScheduler started — notifications 5min, chat 5min, coaching 30min, weekly 60min")
+        logger.info("APScheduler started — notifications 5m, chat 5m, fitmax-refresh 15m, coaching 30m, weekly 60m")
         return scheduler
     except ImportError:
         logger.warning("APScheduler not installed — background notifications disabled. Run: pip install apscheduler")
